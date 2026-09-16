@@ -8,6 +8,27 @@ import 'package:share_plus/share_plus.dart';
 
 void main() => runApp(const DriveRentApp());
 
+CellValue toCellValue(dynamic value) {
+  if (value == null) return TextCellValue('');
+  if (value is CellValue) return value;
+  if (value is int) return IntCellValue(value);
+  if (value is double) return DoubleCellValue(value);
+  if (value is num) return DoubleCellValue(value.toDouble());
+  if (value is bool) return BoolCellValue(value);
+  if (value is DateTime) return DateTimeCellValue(
+    year: value.year,
+    month: value.month,
+    day: value.day,
+    hour: value.hour,
+    minute: value.minute,
+    second: value.second,
+  );
+  return TextCellValue(value.toString());
+}
+
+List<CellValue> toCellValues(List<dynamic> row) => row.map(toCellValue).toList();
+
+
 class DriveRentApp extends StatelessWidget {
   const DriveRentApp({super.key});
   @override
@@ -32,13 +53,13 @@ class LocalExcelDb {
     if (await f.exists()) return;
     final e = Excel.createExcel();
     e.delete('Sheet1');
-    e['Cars'].appendRow(['id','name','registration','daily_rate','status','odometer']);
-    e['Customers'].appendRow(['id','name','phone','license_number','address','notes']);
-    e['Bookings'].appendRow(['id','customer_id','car_id','pickup_at','return_at','amount','deposit','status']);
-    e['Payments'].appendRow(['id','booking_id','amount','method','paid_at','notes']);
-    e['Maintenance'].appendRow(['id','car_id','description','status','scheduled_at','cost','notes']);
-    e['Settings'].appendRow(['business_name','currency']);
-    e['Settings'].appendRow(['DriveRent','INR']);
+    e['Cars'].appendRow(toCellValues(['id','name','registration','daily_rate','status','odometer']));
+    e['Customers'].appendRow(toCellValues(['id','name','phone','license_number','address','notes']));
+    e['Bookings'].appendRow(toCellValues(['id','customer_id','car_id','pickup_at','return_at','amount','deposit','status']));
+    e['Payments'].appendRow(toCellValues(['id','booking_id','amount','method','paid_at','notes']));
+    e['Maintenance'].appendRow(toCellValues(['id','car_id','description','status','scheduled_at','cost','notes']));
+    e['Settings'].appendRow(toCellValues(['business_name','currency']));
+    e['Settings'].appendRow(toCellValues(['DriveRent','INR']));
     await f.writeAsBytes(e.encode()!);
   }
 
@@ -57,7 +78,7 @@ class LocalExcelDb {
   }
 
   Future<void> add(String sheet, List<dynamic> row) async {
-    final e = await open(); e[sheet].appendRow(row); await save(e);
+    final e = await open(); e[sheet].appendRow(toCellValues(row)); await save(e);
   }
 
   Future<void> deleteById(String sheet, String id) async {
