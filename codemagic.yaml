@@ -6,6 +6,8 @@ workflows:
     environment:
       flutter: stable
     scripts:
+      - name: Install Android SDK 36
+        script: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - name: Generate Android platform files
         script: |
           if [ ! -f android/app/build.gradle ] && [ ! -f android/app/build.gradle.kts ]; then
@@ -23,6 +25,8 @@ workflows:
           fi
       - name: Get packages
         script: flutter pub get
+      - name: Analyze project
+        script: flutter analyze --no-fatal-infos
       - name: Build release APK
         script: flutter build apk --release
     artifacts:
