@@ -1,26 +1,8 @@
-# DriveRent Manager v4
+# DriveRent Manager v7
 
-Full Android-only self-drive rental manager prepared for online APK building.
+Android-only self-drive car rental manager. Local XLSX database.
 
-Features:
-- Dashboard
-- Cars add/list/delete
-- Customers add/list/delete
-- Bookings create/list/delete
-- Payments record/list/delete
-- Maintenance record/list/delete
-- Local XLSX workbook in app storage
-- Import XLSX
-- Backup/share XLSX
-- INR
-- Codemagic cloud build
-- GitHub Actions cloud build
-- No web panel
+## Codemagic
+The build workflow creates the Android wrapper and explicitly sets Android compileSdk to 36 before building the release APK.
 
-Online build:
-1. Upload this folder to a GitHub repository.
-2. Connect the repository to Codemagic.
-3. Start the android-release workflow.
-4. Download app-release.apk from Artifacts.
-
-For Play Store release, configure a private Android signing key in the build service.
+Upload this project to GitHub with `pubspec.yaml` and `codemagic.yaml` at the repository root, then run the `android-release` workflow in Codemagic.
