@@ -58,3 +58,5 @@ Upload this project to GitHub with `pubspec.yaml` and `codemagic.yaml` at the re
 The v2.0.2 GitHub workflow uses the Android SDK already installed on the hosted runner. It does not call `android-actions/setup-android`, which avoids that action's obsolete `Failed to find package 'tools'` error. Both workflows accept Android SDK licences before installing API 36 and do not request the optional exact `build-tools;36.0.0` package.
 
 Version 2.0.3 updates `file_picker` to `10.3.3`, which follows Flutter's configured Android compile SDK and remains compatible with the project's existing file-selection and save-file calls.
+
+Version 2.0.4 uses the GitHub Runner's confirmed absolute SDK Manager path, `$ANDROID_SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager`, because that executable is installed but is not included in the runner's command `PATH`.
