@@ -24,4 +24,3 @@ Online build:
 4. Download app-release.apk from Artifacts.
 
 For Play Store release, configure a private Android signing key in the build service.
-# DrivecarRental
