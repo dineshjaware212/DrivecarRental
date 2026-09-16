@@ -54,3 +54,7 @@ The agreement includes the business's mileage, late-return, security-deposit, ad
 The build workflow installs Android SDK 36, creates the Android wrapper, and explicitly sets compileSdk to 36 before building the release APK.
 
 Upload this project to GitHub with `pubspec.yaml` and `codemagic.yaml` at the repository root, then run the `android-release` workflow in Codemagic.
+
+The v2.0.2 GitHub workflow uses the Android SDK already installed on the hosted runner. It does not call `android-actions/setup-android`, which avoids that action's obsolete `Failed to find package 'tools'` error. Both workflows accept Android SDK licences before installing API 36 and do not request the optional exact `build-tools;36.0.0` package.
+
+Version 2.0.3 updates `file_picker` to `10.3.3`, which follows Flutter's configured Android compile SDK and remains compatible with the project's existing file-selection and save-file calls.
