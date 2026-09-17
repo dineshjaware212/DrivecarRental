@@ -1,7 +1,7 @@
 part of 'main.dart';
 
 const bookingStatuses=<String>[
-  'Enquiry','Token Pending','Token Received','Confirmed','Vehicle Delivered',
+  'Enquiry','Booked','Token Pending','Token Received','Confirmed','Vehicle Delivered',
   'Active Rental','Returned','Payment Pending','Completed','Cancelled'
 ];
 
@@ -46,10 +46,13 @@ class AvailabilityPage extends StatefulWidget{
   @override State<AvailabilityPage> createState()=>_AvailabilityPageState();
 }
 class _AvailabilityPageState extends State<AvailabilityPage>{
-  List<List<String>> cars=[],bookings=[];
+  List<List<String>> cars=[],bookings=[],customers=[];
   DateTimeRange range=DateTimeRange(start:DateTime.now(),end:DateTime.now().add(const Duration(days:1)));
   @override void initState(){super.initState();load();}
-  Future<void> load()async{cars=await db.rows('Cars');bookings=await db.rows('Bookings');if(mounted)setState((){});}
+  Future<void> load()async{cars=await db.rows('Cars');bookings=await db.rows('Bookings');customers=await db.rows('Customers');if(mounted)setState((){});}
+  String customerName(String id){for(final r in customers){if(r.isNotEmpty&&r[0]==id)return r.length>1?r[1]:id;}return id;}
+  String customerPhone(String id){for(final r in customers){if(r.isNotEmpty&&r[0]==id)return r.length>2?r[2]:'';}return '';}
+  String vehicleName(String id){for(final r in cars){if(r.isNotEmpty&&r[0]==id)return r.length>2?'${r[1]} (${r[2]})':r[1];}return id;}
   bool free(List<String> car)=>!bookings.any((b){
     if(b.length<8||b[2]!=car[0]||b[7]=='Cancelled')return false;
     final start=DateTime.tryParse(b[3]),end=DateTime.tryParse(b[4]);
@@ -65,7 +68,9 @@ class _AvailabilityPageState extends State<AvailabilityPage>{
       OutlinedButton.icon(onPressed:choose,icon:const Icon(Icons.date_range),label:Text('${DateFormat('dd MMM yyyy').format(range.start)} – ${DateFormat('dd MMM yyyy').format(range.end)}')),
       if(upcomingReturns.isNotEmpty)Card(color:Colors.orange.shade50,child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         const Text('Upcoming Returns',style:TextStyle(fontWeight:FontWeight.bold)),
-        ...upcomingReturns.map((b)=>Text('Booking ${shortBookingId(b[0])} • ${DateFormat('dd MMM yyyy').format(DateTime.parse(b[4]))}')),
+        ...upcomingReturns.map((b)=>ListTile(contentPadding:EdgeInsets.zero,dense:true,leading:const Icon(Icons.assignment_return),
+          title:Text('Booking ${shortBookingId(b[0])} • ${vehicleName(b.length>2?b[2]:'')}'),
+          subtitle:Text('${customerName(b.length>1?b[1]:'')} • ${customerPhone(b.length>1?b[1]:'')}\nReturn: ${b.length>4?bookingDateTime(b[4]):''} • INR ${b.length>5?b[5]:'0'} • ${b.length>7?b[7]:''}'))),
       ]))),
       const SizedBox(height:8),
       ...cars.map((car){final available=free(car);return Card(child:ListTile(
@@ -114,6 +119,52 @@ class _CustomerDocumentsPageState extends State<CustomerDocumentsPage>{
       ]
     ]));
   }
+}
+
+class BookingEditPage extends StatefulWidget{
+  final List<String> booking;
+  const BookingEditPage({super.key,required this.booking});
+  @override State<BookingEditPage> createState()=>_BookingEditPageState();
+}
+class _BookingEditPageState extends State<BookingEditPage>{
+  List<List<String>> customers=[],vehicles=[],bookings=[];
+  late String customerId,vehicleId,status;
+  late DateTime pickup,returnAt;
+  final rate=TextEditingController(),deposit=TextEditingController();
+  bool saving=false;
+  @override void initState(){super.initState();customerId=widget.booking[1];vehicleId=widget.booking[2];pickup=DateTime.tryParse(widget.booking[3])??DateTime.now();returnAt=DateTime.tryParse(widget.booking[4])??pickup.add(const Duration(days:1));rate.text=widget.booking.length>12?widget.booking[12]:'';deposit.text=widget.booking.length>6?widget.booking[6]:'';status=widget.booking.length>7?widget.booking[7]:'Booked';if(!bookingStatuses.contains(status))status='Enquiry';load();}
+  Future<void> load()async{customers=await db.rows('Customers');vehicles=await db.rows('Cars');bookings=await db.rows('Bookings');if(mounted)setState((){});}
+  int get days{final value=(returnAt.difference(pickup).inMinutes/1440).ceil();return value<1?1:value;}
+  double get dailyRate=>double.tryParse(rate.text)??0;
+  Future<void> choose(bool start)async{final initial=start?pickup:returnAt;final d=await showDatePicker(context:context,initialDate:initial,firstDate:DateTime(2020),lastDate:DateTime(2100));if(d==null||!mounted)return;final t=await showTimePicker(context:context,initialTime:TimeOfDay.fromDateTime(initial));if(t==null)return;final value=DateTime(d.year,d.month,d.day,t.hour,t.minute);setState((){if(start){pickup=value;if(!returnAt.isAfter(pickup))returnAt=pickup.add(const Duration(days:1));}else if(value.isAfter(pickup))returnAt=value;});}
+  Future<void> save()async{
+    if(!returnAt.isAfter(pickup)){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Return must be after pickup.')));return;}
+    final conflict=bookings.any((r){if(r.isEmpty||r[0]==widget.booking[0]||r.length<8||r[2]!=vehicleId||r[7]=='Cancelled')return false;final s=DateTime.tryParse(r[3]),e=DateTime.tryParse(r[4]);return s!=null&&e!=null&&pickup.isBefore(e)&&returnAt.isAfter(s);});
+    if(conflict){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('This vehicle is already booked during the selected time.')));return;}
+    setState(()=>saving=true);final id=widget.booking[0];
+    await db.setValueById('Bookings',id,1,customerId,header:'customer_id');await db.setValueById('Bookings',id,2,vehicleId,header:'car_id');
+    await db.setValueById('Bookings',id,3,pickup.toIso8601String(),header:'pickup_at');await db.setValueById('Bookings',id,4,returnAt.toIso8601String(),header:'return_at');
+    await db.setValueById('Bookings',id,5,days*dailyRate,header:'amount');await db.setValueById('Bookings',id,6,double.tryParse(deposit.text)??0,header:'deposit');
+    await db.setValueById('Bookings',id,7,status,header:'status');await db.setValueById('Bookings',id,12,dailyRate,header:'daily_rate');
+    if(status=='Cancelled')await db.setValueById('Bookings',id,11,'Cancelled',header:'payment_status');
+    else if(widget.booking.length>7&&widget.booking[7]=='Cancelled'){
+      final paymentRows=await db.rows('Payments');final paid=paymentRows.where((r)=>r.length>2&&r[1]==id).fold<double>(0,(sum,r)=>sum+(double.tryParse(r[2])??0));
+      final total=days*dailyRate;await db.setValueById('Bookings',id,11,paid<=0?'Pending':paid>=total-0.01?'Paid':'Partially Paid',header:'payment_status');
+    }
+    if(mounted){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Booking updated.')));Navigator.pop(context);}
+  }
+  String vehicleLabel(List<String> r)=>'${r.length>7?r[7]:'Car'} • ${r.length>1?r[1]:''} (${r.length>2?r[2]:''})';
+  @override void dispose(){rate.dispose();deposit.dispose();super.dispose();}
+  @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:Text('Edit Booking ${shortBookingId(widget.booking[0])}')),body:ListView(padding:const EdgeInsets.all(14),children:[
+    DropdownButtonFormField<String>(value:customers.any((r)=>r.isNotEmpty&&r[0]==customerId)?customerId:null,isExpanded:true,decoration:const InputDecoration(labelText:'Customer',border:OutlineInputBorder()),items:customers.map((r)=>DropdownMenuItem(value:r[0],child:Text(r.length>2?'${r[1]} • ${r[2]}':r[1]))).toList(),onChanged:(v)=>setState(()=>customerId=v??customerId)),const SizedBox(height:8),
+    DropdownButtonFormField<String>(value:vehicles.any((r)=>r.isNotEmpty&&r[0]==vehicleId)?vehicleId:null,isExpanded:true,decoration:const InputDecoration(labelText:'Vehicle',border:OutlineInputBorder()),items:vehicles.map((r)=>DropdownMenuItem(value:r[0],child:Text(vehicleLabel(r)))).toList(),onChanged:(v)=>setState(()=>vehicleId=v??vehicleId)),const SizedBox(height:8),
+    ListTile(contentPadding:EdgeInsets.zero,title:const Text('Pickup'),subtitle:Text(bookingDateTime(pickup.toIso8601String())),trailing:TextButton(onPressed:()=>choose(true),child:const Text('Edit date & time'))),
+    ListTile(contentPadding:EdgeInsets.zero,title:const Text('Return'),subtitle:Text(bookingDateTime(returnAt.toIso8601String())),trailing:TextButton(onPressed:()=>choose(false),child:const Text('Edit date & time'))),
+    field(rate,'Daily rent for this booking (INR)',number:true),field(deposit,'Security deposit (INR)',number:true),
+    DropdownButtonFormField<String>(value:status,decoration:const InputDecoration(labelText:'Booking status',border:OutlineInputBorder()),items:bookingStatuses.map((s)=>DropdownMenuItem(value:s,child:Text(s))).toList(),onChanged:(v)=>setState(()=>status=v??status)),const SizedBox(height:8),
+    Card(color:Theme.of(context).colorScheme.primaryContainer,child:Padding(padding:const EdgeInsets.all(12),child:Text('$days rental day${days==1?'':'s'} • Total INR ${(days*dailyRate).toStringAsFixed(2)}',style:const TextStyle(fontWeight:FontWeight.bold)))),
+    FilledButton.icon(onPressed:saving?null:save,icon:const Icon(Icons.save),label:const Text('Save Booking Changes')),
+  ]));
 }
 
 class InspectionsPage extends StatefulWidget{
@@ -215,7 +266,15 @@ Future<void> showBookingStatusDialog(BuildContext context,List<String> booking,F
   final chosen=await showDialog<String>(context:context,builder:(c)=>AlertDialog(title:const Text('Booking Status'),content:DropdownButtonFormField<String>(value:status,
     items:bookingStatuses.map((s)=>DropdownMenuItem(value:s,child:Text(s))).toList(),onChanged:(v)=>status=v??status),
     actions:[TextButton(onPressed:()=>Navigator.pop(c),child:const Text('Cancel')),FilledButton(onPressed:()=>Navigator.pop(c,status),child:const Text('Save'))]));
-  if(chosen!=null){await db.setValueById('Bookings',booking[0],7,chosen,header:'status');await reload();}
+  if(chosen!=null){
+    await db.setValueById('Bookings',booking[0],7,chosen,header:'status');
+    if(chosen=='Cancelled')await db.setValueById('Bookings',booking[0],11,'Cancelled',header:'payment_status');
+    else if(booking.length>7&&booking[7]=='Cancelled'){
+      final paymentRows=await db.rows('Payments');final paid=paymentRows.where((r)=>r.length>2&&r[1]==booking[0]).fold<double>(0,(sum,r)=>sum+(double.tryParse(r[2])??0));
+      final total=booking.length>5?double.tryParse(booking[5])??0:0;await db.setValueById('Bookings',booking[0],11,paid<=0?'Pending':paid>=total-0.01?'Paid':'Partially Paid',header:'payment_status');
+    }
+    await reload();
+  }
 }
 
 Future<void> shareBookingInvoice(List<String> booking,List<List<String>> customers,List<List<String>> cars,List<List<String>> payments)async{
@@ -285,17 +344,18 @@ class _ExpensesReportPageState extends State<ExpensesReportPage>{
   final amount=TextEditingController(),notes=TextEditingController();
   @override void initState(){super.initState();load();}
   Future<void> load()async{expenses=await db.rows('Expenses');payments=await db.rows('Payments');cars=await db.rows('Cars');bookings=await db.rows('Bookings');if(mounted)setState((){});}
-  double get income=>payments.fold<double>(0,(s,r)=>s+(r.length>2?double.tryParse(r[2])??0:0));
+  Set<String> get activeBookingIds=>bookings.where((r)=>r.isNotEmpty&&(r.length<=7||r[7]!='Cancelled')).map((r)=>r[0]).toSet();
+  double get income=>payments.where((r)=>r.length>1&&activeBookingIds.contains(r[1])).fold<double>(0,(s,r)=>s+(r.length>2?double.tryParse(r[2])??0:0));
   double get cost=>expenses.fold<double>(0,(s,r)=>s+(r.length>3?double.tryParse(r[3])??0:0));
   double get pending{
-    final billed=bookings.fold<double>(0,(s,r)=>s+(r.length>5?double.tryParse(r[5])??0:0));final value=billed-income;return value<0?0:value;
+    final billed=bookings.where((r)=>r.length<=7||r[7]!='Cancelled').fold<double>(0,(s,r)=>s+(r.length>5?double.tryParse(r[5])??0:0));final value=billed-income;return value<0?0:value;
   }
   bool currentMonth(String value){final d=DateTime.tryParse(value);final now=DateTime.now();return d!=null&&d.year==now.year&&d.month==now.month;}
-  double get monthIncome=>payments.where((r)=>r.length>4&&currentMonth(r[4])).fold<double>(0,(s,r)=>s+(double.tryParse(r[2])??0));
+  double get monthIncome=>payments.where((r)=>r.length>4&&activeBookingIds.contains(r[1])&&currentMonth(r[4])).fold<double>(0,(s,r)=>s+(double.tryParse(r[2])??0));
   double get monthCost=>expenses.where((r)=>r.length>4&&currentMonth(r[4])).fold<double>(0,(s,r)=>s+(double.tryParse(r[3])??0));
   String get bestCar{
     String best='No data';double bestProfit=-double.maxFinite;
-    for(final car in cars){final id=car[0];final bookingIds=bookings.where((b)=>b.length>2&&b[2]==id).map((b)=>b[0]).toSet();
+    for(final car in cars){final id=car[0];final bookingIds=bookings.where((b)=>b.length>2&&b[2]==id&&(b.length<=7||b[7]!='Cancelled')).map((b)=>b[0]).toSet();
       final revenue=payments.where((p)=>p.length>2&&bookingIds.contains(p[1])).fold<double>(0,(s,p)=>s+(double.tryParse(p[2])??0));
       final vehicleCost=expenses.where((e)=>e.length>3&&e[1]==id).fold<double>(0,(s,e)=>s+(double.tryParse(e[3])??0));
       if(revenue-vehicleCost>bestProfit){bestProfit=revenue-vehicleCost;best=car.length>1?'${car[1]} • INR ${bestProfit.toStringAsFixed(2)}':id;}

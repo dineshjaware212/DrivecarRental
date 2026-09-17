@@ -81,3 +81,5 @@ The generated APK location is `build/app/outputs/flutter-apk/app-release.apk`. T
 Version 2.1.1 resolves Flutter analysis errors by hiding Excel's conflicting `Border` type and including a widget test that uses the correct `DriveRentApp` root widget instead of Flutter's default `MyApp` placeholder.
 
 Version 2.3.0 adds cars and two-wheelers throughout the app, customer-specific booking rates, clickable dashboard navigation, booking-linked customer documents, contact-to-customer creation, GoCar Rental Services branding, and detailed invoice/receipt PDFs.
+
+Version 2.4.0 adds pickup and return times, booking date/time editing, searchable customer selection, coloured booking statuses, direct customer calling and payment navigation, cancellation-aware earnings, detailed upcoming returns, date-filtered vehicle availability, WhatsApp catalog details, and individual vehicle-photo sharing.
