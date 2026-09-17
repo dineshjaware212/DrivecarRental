@@ -61,4 +61,13 @@ Version 2.0.3 updates `file_picker` to `10.3.3`, which follows Flutter's configu
 
 Version 2.0.4 uses the GitHub Runner's confirmed absolute SDK Manager path, `$ANDROID_SDK_ROOT/cmdline-tools/16.0/bin/sdkmanager`, because that executable is installed but is not included in the runner's command `PATH`.
 
-Version 2.0.5 removes all manual `sdkmanager` commands from both GitHub Actions and Codemagic. The generated Android project now uses `flutter.compileSdkVersion`, allowing the installed stable Flutter toolchain and `file_picker 10.3.3` to select the compatible compile SDK automatically. This bypasses the repeatedly failing SDK Manager installation completely.
+## One-click APK building
+
+This version follows the supplied working reference project. It never invokes `sdkmanager`. After stable Flutter creates the Android wrapper, the workflows set the generated app module to `compileSdk 36` and build the release APK.
+
+- **GitHub:** Actions → Build DriveRent Manager APK → Run workflow → download `DriveRent-Manager-APK` from Artifacts.
+- **Codemagic:** Run the `android-release` workflow and download `app-release.apk` from Artifacts.
+- **Windows PC:** Double-click `build_apk.bat` after installing Flutter and Android SDK 36.
+- **macOS/Linux:** Run `chmod +x build_apk.sh`, then `./build_apk.sh`.
+
+The generated APK location is `build/app/outputs/flutter-apk/app-release.apk`. The project uses `file_picker 10.3.3`.
