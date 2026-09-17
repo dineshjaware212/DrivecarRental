@@ -71,3 +71,5 @@ This version follows the supplied working reference project. It never invokes `s
 - **macOS/Linux:** Run `chmod +x build_apk.sh`, then `./build_apk.sh`.
 
 The generated APK location is `build/app/outputs/flutter-apk/app-release.apk`. The project uses `file_picker 10.3.3`.
+
+Version 2.1.1 resolves Flutter analysis errors by hiding Excel's conflicting `Border` type and including a widget test that uses the correct `DriveRentApp` root widget instead of Flutter's default `MyApp` placeholder.
