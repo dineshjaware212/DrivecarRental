@@ -21,6 +21,11 @@ if [ -f android/app/build.gradle ]; then
   sed -i.bak 's/compileSdkVersion [0-9][0-9]*/compileSdkVersion 36/g' android/app/build.gradle
 fi
 
+sed -i.bak 's/android:label="driverent_manager"/android:label="GoCar Rental Services"/' android/app/src/main/AndroidManifest.xml
+if ! grep -q 'android.permission.READ_CONTACTS' android/app/src/main/AndroidManifest.xml; then
+  sed -i.bak '/<manifest/a\    <uses-permission android:name="android.permission.READ_CONTACTS" />' android/app/src/main/AndroidManifest.xml
+fi
+
 flutter clean
 flutter pub get
 flutter build apk --release --no-pub

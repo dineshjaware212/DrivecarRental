@@ -14,6 +14,7 @@ if errorlevel 1 goto :failed
 
 if exist android\app\build.gradle.kts powershell -NoProfile -Command "$p='android/app/build.gradle.kts'; $c=Get-Content $p -Raw; $c=$c -replace 'compileSdk = flutter.compileSdkVersion','compileSdk = 36'; $c=$c -replace 'compileSdk = [0-9]+','compileSdk = 36'; Set-Content $p $c"
 if exist android\app\build.gradle powershell -NoProfile -Command "$p='android/app/build.gradle'; $c=Get-Content $p -Raw; $c=$c -replace 'compileSdkVersion flutter.compileSdkVersion','compileSdkVersion 36'; $c=$c -replace 'compileSdkVersion [0-9]+','compileSdkVersion 36'; Set-Content $p $c"
+powershell -NoProfile -Command "$p='android/app/src/main/AndroidManifest.xml'; $c=Get-Content $p -Raw; $c=$c -replace 'android:label=\"driverent_manager\"','android:label=\"GoCar Rental Services\"'; if($c -notmatch 'android.permission.READ_CONTACTS'){$c=$c -replace '(<manifest[^>]*>)','$1`r`n    <uses-permission android:name=\"android.permission.READ_CONTACTS\" />'}; Set-Content $p $c"
 
 flutter clean
 if errorlevel 1 goto :failed

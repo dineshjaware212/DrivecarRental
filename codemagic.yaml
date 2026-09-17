@@ -1,6 +1,6 @@
 workflows:
   android-release:
-    name: DriveRent Manager Android Release
+    name: GoCar Rental Services Android Release
     max_build_duration: 60
     instance_type: linux_x2
     environment:
@@ -22,6 +22,12 @@ workflows:
             sed -i 's/compileSdkVersion [0-9][0-9]*/compileSdkVersion 36/g' android/app/build.gradle
           fi
           grep -R "compileSdk" android/app/build.gradle* || true
+      - name: Configure app name and contacts permission
+        script: |
+          sed -i 's/android:label="driverent_manager"/android:label="GoCar Rental Services"/' android/app/src/main/AndroidManifest.xml
+          if ! grep -q 'android.permission.READ_CONTACTS' android/app/src/main/AndroidManifest.xml; then
+            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.READ_CONTACTS" />' android/app/src/main/AndroidManifest.xml
+          fi
       - name: Get packages
         script: flutter pub get
       - name: Analyze project

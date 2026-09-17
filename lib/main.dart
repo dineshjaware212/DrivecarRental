@@ -42,7 +42,7 @@ class DriveRentApp extends StatelessWidget {
   const DriveRentApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'DriveRent Manager',
+    title: 'GoCar Rental Services',
     debugShowCheckedModeBanner: false,
     theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
     home: const DashboardPage(),
@@ -67,13 +67,13 @@ class LocalExcelDb {
     if (await f.exists()) return;
     final e = Excel.createExcel();
     e.delete('Sheet1');
-    e['Cars'].appendRow(toCellValues(['id','name','registration','daily_rate','status','odometer','photo_path']));
+    e['Cars'].appendRow(toCellValues(['id','name','registration','daily_rate','status','odometer','photo_path','vehicle_type']));
     e['Customers'].appendRow(toCellValues(['id','name','phone','license_number','address','notes']));
-    e['Bookings'].appendRow(toCellValues(['id','customer_id','car_id','pickup_at','return_at','amount','deposit','status','agreement_path','confirmation_status','confirmation_path','payment_status']));
+    e['Bookings'].appendRow(toCellValues(['id','customer_id','car_id','pickup_at','return_at','amount','deposit','status','agreement_path','confirmation_status','confirmation_path','payment_status','daily_rate']));
     e['Payments'].appendRow(toCellValues(['id','booking_id','amount','method','paid_at','notes']));
     e['Maintenance'].appendRow(toCellValues(['id','car_id','description','status','scheduled_at','cost','notes']));
     e['Settings'].appendRow(toCellValues(['business_name','currency']));
-    e['Settings'].appendRow(toCellValues(['DriveRent','INR']));
+    e['Settings'].appendRow(toCellValues(['GoCar Rental Services','INR']));
     await f.writeAsBytes(e.encode()!);
   }
 
@@ -82,6 +82,17 @@ class LocalExcelDb {
     final f=await file();final e=Excel.decodeBytes(await f.readAsBytes());var changed=false;
     for(final entry in headers.entries){
       if(e[entry.key].rows.isEmpty){e[entry.key].appendRow(toCellValues(entry.value));changed=true;}
+    }
+    final requiredHeaders=<String,Map<int,String>>{
+      'Cars':{7:'vehicle_type'},
+      'Bookings':{12:'daily_rate'},
+    };
+    for(final sheetEntry in requiredHeaders.entries){
+      for(final columnEntry in sheetEntry.value.entries){
+        final cell=e[sheetEntry.key].cell(CellIndex.indexByColumnRow(
+          columnIndex:columnEntry.key,rowIndex:0));
+        if(cell.value?.toString()!=columnEntry.value){cell.value=TextCellValue(columnEntry.value);changed=true;}
+      }
     }
     if(changed)await f.writeAsBytes(e.encode()!);
     return e;
@@ -134,7 +145,7 @@ class LocalExcelDb {
 
   Future<void> exportExcel() async =>
     Share.shareXFiles([XFile((await file()).path)],
-      text: 'DriveRent Manager Excel backup');
+      text: 'GoCar Rental Services Excel backup');
 }
 
 final db = LocalExcelDb();
@@ -182,10 +193,10 @@ class AgreementService {
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(36),
       build: (_) => [
-        pw.Center(child: pw.Text('SELF-DRIVE CAR RENTAL AGREEMENT',
+        pw.Center(child: pw.Text('SELF-DRIVE VEHICLE RENTAL AGREEMENT',
           style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold))),
         pw.SizedBox(height: 6),
-        pw.Center(child: pw.Text('DriveRent Manager',
+        pw.Center(child: pw.Text('GoCar Rental Services',
           style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700))),
         pw.SizedBox(height: 22),
         _pdfSection('Agreement details', [
@@ -203,6 +214,7 @@ class AgreementService {
           ['Registration', registration],
           ['Pickup date', date(cell(3))],
           ['Return date', date(cell(4))],
+          ['Daily rent', 'INR ${cell(12)}'],
           ['Rental amount', 'INR ${cell(5)}'],
           ['Security deposit', 'INR ${cell(6)}'],
         ]),
@@ -260,8 +272,8 @@ class CatalogService {
   static Future<File> build(List<List<String>> cars) async {
     final pdf=pw.Document();
     final widgets=<pw.Widget>[
-      pw.Text('AVAILABLE SELF-DRIVE CARS',style:pw.TextStyle(fontSize:20,fontWeight:pw.FontWeight.bold)),
-      pw.SizedBox(height:6),pw.Text('DriveRent Manager • ${DateFormat('dd MMM yyyy').format(DateTime.now())}'),
+      pw.Text('AVAILABLE RENTAL VEHICLES',style:pw.TextStyle(fontSize:20,fontWeight:pw.FontWeight.bold)),
+      pw.SizedBox(height:6),pw.Text('GoCar Rental Services • ${DateFormat('dd MMM yyyy').format(DateTime.now())}'),
       pw.SizedBox(height:18),
     ];
     for(final car in cars){
@@ -276,16 +288,17 @@ class CatalogService {
           if(photo!=null)...[photo,pw.SizedBox(width:12)],
           pw.Expanded(child:pw.Column(crossAxisAlignment:pw.CrossAxisAlignment.start,children:[
             pw.Text(car.length>1?car[1]:'Car',style:pw.TextStyle(fontSize:15,fontWeight:pw.FontWeight.bold)),
+            pw.Text('Type: ${car.length>7?car[7]:'Car'}'),
             pw.Text('Registration: ${car.length>2?car[2]:''}'),
             pw.Text('Daily rate: INR ${car.length>3?car[3]:'0'}'),
             pw.Text('Status: Available',style:pw.TextStyle(color:PdfColors.green700)),
           ])),
         ])));
     }
-    if(cars.isEmpty)widgets.add(pw.Text('No cars are currently available.'));
+    if(cars.isEmpty)widgets.add(pw.Text('No vehicles are currently available.'));
     pdf.addPage(pw.MultiPage(pageFormat:PdfPageFormat.a4,margin:const pw.EdgeInsets.all(32),build:(_)=>widgets));
     final dir=await getApplicationDocumentsDirectory();
-    final file=File('${dir.path}/DriveRent_Available_Cars_Catalog.pdf');
+    final file=File('${dir.path}/DriveRent_Available_Vehicles_Catalog.pdf');
     await file.writeAsBytes(await pdf.save(),flush:true);return file;
   }
 }
@@ -305,7 +318,7 @@ class BookingConfirmationService {
         pw.SizedBox(height:22),
         AgreementService._pdfSection('Booking details',[
           ['Booking ID',cell(0)],['Customer',customer],['Phone',phone],['Vehicle',car],
-          ['Pickup',date(cell(3))],['Return',date(cell(4))],['Rental amount','INR ${cell(5)}'],
+          ['Pickup',date(cell(3))],['Return',date(cell(4))],['Daily rent','INR ${cell(12)}'],['Rental amount','INR ${cell(5)}'],
           ['Security deposit','INR ${cell(6)}'],['Confirmation status','Confirmed'],
         ]),
         pw.Center(child:pw.BarcodeWidget(barcode:pw.Barcode.qrCode(),data:qrData,width:150,height:150)),
@@ -330,15 +343,17 @@ class DashboardPage extends StatefulWidget {
 }
 class _DashboardPageState extends State<DashboardPage> {
   int tab = 0;
-  final pages = const [
-    HomePage(), CarsPage(), CustomersPage(), BookingsPage(), PaymentsPage(), MaintenancePage()
-  ];
   @override
-  Widget build(BuildContext c) => Scaffold(
-    appBar: AppBar(title: const Text('DriveRent Manager'),actions:[
+  Widget build(BuildContext c) {
+    final pages = [
+      HomePage(onNavigate:(index)=>setState(()=>tab=index)),
+      const CarsPage(),const CustomersPage(),const BookingsPage(),const PaymentsPage(),const MaintenancePage()
+    ];
+    return Scaffold(
+    appBar: AppBar(title: const Text('GoCar Rental Services'),actions:[
       IconButton(tooltip:'Operations',icon:const Icon(Icons.grid_view_rounded),
         onPressed:()=>Navigator.of(c).push(MaterialPageRoute(builder:(_)=>const OperationsHubPage()))),
-      IconButton(tooltip:'Available Cars Catalog',icon:const Icon(Icons.photo_library_outlined),
+      IconButton(tooltip:'Available Vehicles Catalog',icon:const Icon(Icons.photo_library_outlined),
         onPressed:()=>Navigator.of(c).push(MaterialPageRoute(builder:(_)=>const CatalogPage())))
     ]),
     body: pages[tab],
@@ -347,18 +362,19 @@ class _DashboardPageState extends State<DashboardPage> {
       onDestinationSelected: (i) => setState(() => tab = i),
       destinations: const [
         NavigationDestination(icon: Icon(Icons.dashboard), label: 'Home'),
-        NavigationDestination(icon: Icon(Icons.directions_car), label: 'Cars'),
+        NavigationDestination(icon: Icon(Icons.directions_car), label: 'Vehicles'),
         NavigationDestination(icon: Icon(Icons.people), label: 'Customers'),
         NavigationDestination(icon: Icon(Icons.calendar_month), label: 'Bookings'),
         NavigationDestination(icon: Icon(Icons.payments), label: 'Payments'),
         NavigationDestination(icon: Icon(Icons.build), label: 'Service'),
       ],
     ),
-  );
+  );}
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final ValueChanged<int> onNavigate;
+  const HomePage({super.key,required this.onNavigate});
   @override State<HomePage> createState() => _HomePageState();
 }
 class _HomePageState extends State<HomePage> {
@@ -368,6 +384,9 @@ class _HomePageState extends State<HomePage> {
   Future<void> load() async {
     final m = <String,int>{};
     for (final s in LocalExcelDb.sheets.take(5)) m[s] = (await db.rows(s)).length;
+    final vehicles=await db.rows('Cars');
+    m['Cars']=vehicles.where((r)=>r.length<=7||r[7]!='Two Wheeler').length;
+    m['TwoWheelers']=vehicles.where((r)=>r.length>7&&r[7]=='Two Wheeler').length;
     final bookingRows=await db.rows('Bookings');
     final paymentRows=await db.rows('Payments');
     final total=bookingRows.fold<double>(0.0,(sum,r)=>sum+(r.length>5?double.tryParse(r[5])??0:0));
@@ -381,11 +400,12 @@ class _HomePageState extends State<HomePage> {
       const Text('Rental Dashboard', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
       const SizedBox(height: 16),
       Wrap(spacing: 10, runSpacing: 10, children: [
-        metric('Cars', n['Cars'] ?? 0, Icons.directions_car),
-        metric('Customers', n['Customers'] ?? 0, Icons.people),
-        metric('Bookings', n['Bookings'] ?? 0, Icons.calendar_month),
-        metric('Payments', n['Payments'] ?? 0, Icons.payments),
-        metric('Service', n['Maintenance'] ?? 0, Icons.build),
+        metric('Cars', n['Cars'] ?? 0, Icons.directions_car,1),
+        metric('Two Wheelers', n['TwoWheelers'] ?? 0, Icons.two_wheeler,1),
+        metric('Customers', n['Customers'] ?? 0, Icons.people,2),
+        metric('Bookings', n['Bookings'] ?? 0, Icons.calendar_month,3),
+        metric('Payments', n['Payments'] ?? 0, Icons.payments,4),
+        metric('Service', n['Maintenance'] ?? 0, Icons.build,5),
       ]),
       const SizedBox(height:12),
       Row(children:[
@@ -404,10 +424,12 @@ class _HomePageState extends State<HomePage> {
         icon: const Icon(Icons.download), label: const Text('Backup / Share Excel')),
     ]),
   );
-  Widget metric(String t, int v, IconData i) => SizedBox(
-    width: 155, child: Card(child: Padding(padding: const EdgeInsets.all(16),
+  Widget metric(String t, int v, IconData i,int destination) => SizedBox(
+    width: 155, child: Card(child: InkWell(borderRadius:BorderRadius.circular(12),
+      onTap:()=>widget.onNavigate(destination),
+      child:Padding(padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-        children: [Icon(i,size:30), Text('$v',style:const TextStyle(fontSize:26,fontWeight:FontWeight.bold)), Text(t)]))));
+        children: [Icon(i,size:30), Text('$v',style:const TextStyle(fontSize:26,fontWeight:FontWeight.bold)), Text(t)])))));
 }
 
 class CarsPage extends StatefulWidget {
@@ -416,11 +438,12 @@ class CarsPage extends StatefulWidget {
 }
 class _CarsPageState extends State<CarsPage> {
   List<List<String>> data=[]; final name=TextEditingController(), reg=TextEditingController(), rate=TextEditingController();
+  String vehicleType='Car';
   @override void initState(){super.initState();load();}
   Future<void> load()async{data=await db.rows('Cars');if(mounted)setState((){});}
   Future<void> add()async{
     if(name.text.trim().isEmpty||reg.text.trim().isEmpty)return;
-    await db.add('Cars',[newId(),name.text.trim(),reg.text.trim(),double.tryParse(rate.text)??0,'Available',0]);
+    await db.add('Cars',[newId(),name.text.trim(),reg.text.trim(),double.tryParse(rate.text)??0,'Available',0,'',vehicleType]);
     name.clear();reg.clear();rate.clear();load();
   }
   Future<void> remove(String x)async{await db.deleteById('Cars',x);load();}
@@ -434,18 +457,20 @@ class _CarsPageState extends State<CarsPage> {
     await db.setValueById('Cars',car[0],6,target.path,header:'photo_path');await load();
   }
   @override Widget build(BuildContext c)=>ListView(padding:const EdgeInsets.all(12),children:[
-    const Text('Cars',style:TextStyle(fontSize:26,fontWeight:FontWeight.bold)),
-    field(name,'Car name'),field(reg,'Registration'),field(rate,'Daily rate (INR)',number:true),
-    FilledButton.icon(onPressed:add,icon:const Icon(Icons.add),label:const Text('Add Car')),
+    const Text('Vehicles',style:TextStyle(fontSize:26,fontWeight:FontWeight.bold)),
+    DropdownButtonFormField<String>(value:vehicleType,decoration:const InputDecoration(labelText:'Vehicle type',border:OutlineInputBorder()),
+      items:const ['Car','Two Wheeler'].map((x)=>DropdownMenuItem(value:x,child:Text(x))).toList(),onChanged:(v)=>setState(()=>vehicleType=v??'Car')),
+    const SizedBox(height:8),field(name,'Vehicle name / model'),field(reg,'Registration'),field(rate,'Default daily rate (INR)',number:true),
+    FilledButton.icon(onPressed:add,icon:const Icon(Icons.add),label:const Text('Add Vehicle')),
     ...data.map((r)=>Card(child:ListTile(
       leading:r.length>6&&r[6].isNotEmpty&&File(r[6]).existsSync()
         ?ClipRRect(borderRadius:BorderRadius.circular(6),child:Image.file(File(r[6]),width:58,height:58,fit:BoxFit.cover))
-        :const SizedBox(width:58,child:Icon(Icons.directions_car)),
+        :SizedBox(width:58,child:Icon(r.length>7&&r[7]=='Two Wheeler'?Icons.two_wheeler:Icons.directions_car)),
       title:Text(r.length>1?r[1]:''),
-      subtitle:Text('${r.length>2?r[2]:''} • ₹${r.length>3?r[3]:''} • ${r.length>4?r[4]:''}'),
+      subtitle:Text('${r.length>7?r[7]:'Car'} • ${r.length>2?r[2]:''} • ₹${r.length>3?r[3]:''}/day • ${r.length>4?r[4]:''}'),
       trailing:PopupMenuButton<String>(onSelected:(v)=>v=='photo'?uploadPhoto(r):remove(r[0]),itemBuilder:(_)=>const[
         PopupMenuItem(value:'photo',child:ListTile(leading:Icon(Icons.add_a_photo),title:Text('Upload photo'))),
-        PopupMenuItem(value:'delete',child:ListTile(leading:Icon(Icons.delete_outline),title:Text('Delete car'))),
+        PopupMenuItem(value:'delete',child:ListTile(leading:Icon(Icons.delete_outline),title:Text('Delete vehicle'))),
       ]))))
   ]);
 }
@@ -470,24 +495,24 @@ class _CatalogPageState extends State<CatalogPage>{
   Future<void> shareCatalog()async{
     setState(()=>busy=true);
     try{final file=await CatalogService.build(availableCars);await Share.shareXFiles([XFile(file.path)],
-      subject:'Available self-drive cars',text:'Our currently available self-drive cars. Select WhatsApp to share this catalog.');}
+      subject:'Available rental vehicles',text:'Our currently available cars and two-wheelers. Select WhatsApp to share this catalog.');}
     finally{if(mounted)setState(()=>busy=false);}
   }
   @override Widget build(BuildContext context)=>Scaffold(
-    appBar:AppBar(title:const Text('Available Cars Catalog')),
+    appBar:AppBar(title:const Text('Available Vehicles Catalog')),
     floatingActionButton:FloatingActionButton.extended(onPressed:busy?null:shareCatalog,
       icon:const Icon(Icons.share),label:const Text('Share via WhatsApp')),
-    body:availableCars.isEmpty?const Center(child:Text('No cars are currently available.')):
+    body:availableCars.isEmpty?const Center(child:Text('No vehicles are currently available.')):
       GridView.builder(padding:const EdgeInsets.fromLTRB(12,12,12,90),
         gridDelegate:const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount:2,childAspectRatio:.72,crossAxisSpacing:10,mainAxisSpacing:10),
         itemCount:availableCars.length,itemBuilder:(_,i){final r=availableCars[i];
           final hasPhoto=r.length>6&&r[6].isNotEmpty&&File(r[6]).existsSync();
           return Card(clipBehavior:Clip.antiAlias,child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
             Expanded(child:SizedBox(width:double.infinity,child:hasPhoto?Image.file(File(r[6]),fit:BoxFit.cover):
-              Container(color:Colors.grey.shade200,child:const Icon(Icons.directions_car,size:64)))),
+              Container(color:Colors.grey.shade200,child:Icon(r.length>7&&r[7]=='Two Wheeler'?Icons.two_wheeler:Icons.directions_car,size:64)))),
             Padding(padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
               Text(r.length>1?r[1]:'Car',maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(fontWeight:FontWeight.bold)),
-              Text(r.length>2?r[2]:''),Text('INR ${r.length>3?r[3]:'0'} / day'),
+              Text('${r.length>7?r[7]:'Car'} • ${r.length>2?r[2]:''}'),Text('INR ${r.length>3?r[3]:'0'} / day'),
               const Text('Available',style:TextStyle(color:Colors.green,fontWeight:FontWeight.bold)),
             ]))]));}));
 }
@@ -508,12 +533,25 @@ class _CustomersPageState extends State<CustomersPage>{
   Future<void> remove(String x)async{await db.deleteById('Customers',x);load();}
   Future<void> selectFromContacts()async{
     try{
-      final contact=await FlutterContacts.openExternalPick();
-      if(contact==null)return;
-      setState((){
-        if(contact.displayName.trim().isNotEmpty)name.text=contact.displayName.trim();
-        if(contact.phones.isNotEmpty)phone.text=contact.phones.first.number;
-      });
+      if(!await FlutterContacts.requestPermission(readonly:true)){
+        if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:Text('Contacts permission is required. Please allow it in phone settings.')));
+        return;
+      }
+      final selected=await FlutterContacts.openExternalPick();
+      if(selected==null)return;
+      final contact=await FlutterContacts.getContact(selected.id,withProperties:true)??selected;
+      final selectedName=contact.displayName.trim();
+      final selectedPhone=contact.phones.isEmpty?'':contact.phones.first.number.trim();
+      if(selectedName.isEmpty||selectedPhone.isEmpty){
+        if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:Text('The selected contact must have a name and phone number.')));
+        return;
+      }
+      await db.add('Customers',[newId(),selectedName,selectedPhone,'','','']);
+      await load();
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content:Text('$selectedName added as a customer.')));
     }catch(e){
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content:Text('Unable to open phone contacts: $e')));
@@ -522,7 +560,7 @@ class _CustomersPageState extends State<CustomersPage>{
   @override Widget build(BuildContext c)=>ListView(padding:const EdgeInsets.all(12),children:[
     const Text('Customers',style:TextStyle(fontSize:26,fontWeight:FontWeight.bold)),
     OutlinedButton.icon(onPressed:selectFromContacts,
-      icon:const Icon(Icons.contact_phone),label:const Text('Select from Phone Contacts')),
+      icon:const Icon(Icons.contact_phone),label:const Text('Select Contact & Add Customer')),
     const SizedBox(height:8),
     field(name,'Customer name'),field(phone,'Phone',number:true),field(lic,'Driving licence number'),
     FilledButton.icon(onPressed:add,icon:const Icon(Icons.person_add),label:const Text('Add Customer')),
@@ -539,18 +577,23 @@ class BookingsPage extends StatefulWidget {
 }
 class _BookingsPageState extends State<BookingsPage>{
   List<List<String>> data=[],customers=[],cars=[],payments=[];
-  final amount=TextEditingController(),deposit=TextEditingController();
+  final amount=TextEditingController(),deposit=TextEditingController(),bookingRate=TextEditingController();
   String? selectedCustomerId,selectedCarId;
   DateTime pickup=DateTime.now(), ret=DateTime.now().add(const Duration(days:1));
   @override void initState(){super.initState();load();}
   int get rentalDays {final d=ret.difference(pickup).inDays;return d<1?1:d;}
-  double get dailyRate {
+  double get defaultDailyRate {
     for(final r in cars){if(r.isNotEmpty&&r[0]==selectedCarId)return r.length>3?double.tryParse(r[3])??0:0;}
     return 0;
   }
+  double get dailyRate=>double.tryParse(bookingRate.text)??defaultDailyRate;
   String customerLabel(String id){for(final r in customers){if(r.isNotEmpty&&r[0]==id)return r.length>1?r[1]:id;}return id;}
   String customerPhone(String id){for(final r in customers){if(r.isNotEmpty&&r[0]==id)return r.length>2?r[2]:'';}return '';}
-  String carLabel(String id){for(final r in cars){if(r.isNotEmpty&&r[0]==id)return r.length>2?'${r[1]} (${r[2]})':r[1];}return id;}
+  String documentStatus(String id){
+    for(final r in customers){if(r.isNotEmpty&&r[0]==id){var count=0;for(final column in [6,7,8]){if(r.length>column&&r[column].isNotEmpty)count++;}return '$count/3 documents';}}
+    return '0/3 documents';
+  }
+  String carLabel(String id){for(final r in cars){if(r.isNotEmpty&&r[0]==id){final type=r.length>7?r[7]:'Car';return r.length>2?'$type • ${r[1]} (${r[2]})':'$type • ${r[1]}';}}return id;}
   double paidFor(String id)=>payments.where((r)=>r.length>2&&r[1]==id)
     .fold<double>(0.0,(sum,r)=>sum+(double.tryParse(r[2])??0));
   void recalculate(){amount.text=(rentalDays*dailyRate).toStringAsFixed(2);}
@@ -571,7 +614,7 @@ class _BookingsPageState extends State<BookingsPage>{
   }
   Future<void> add()async{
     if(selectedCustomerId==null||selectedCarId==null){
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Select a customer and a car.')));return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Select a customer and a vehicle.')));return;
     }
     final overlaps=data.any((r){
       if(r.length<5||r[2]!=selectedCarId)return false;
@@ -579,12 +622,12 @@ class _BookingsPageState extends State<BookingsPage>{
       return oldStart!=null&&oldEnd!=null&&pickup.isBefore(oldEnd)&&ret.isAfter(oldStart);
     });
     if(overlaps){
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('This car is already booked during the selected dates.')));return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('This vehicle is already booked during the selected dates.')));return;
     }
     recalculate();
     await db.add('Bookings',[newId(),selectedCustomerId,selectedCarId,pickup.toIso8601String(),ret.toIso8601String(),
-      double.tryParse(amount.text)??0,double.tryParse(deposit.text)??0,'Booked']);
-    selectedCustomerId=null;selectedCarId=null;amount.clear();deposit.clear();load();
+      double.tryParse(amount.text)??0,double.tryParse(deposit.text)??0,'Booked','','','','Pending',dailyRate]);
+    selectedCustomerId=null;selectedCarId=null;amount.clear();deposit.clear();bookingRate.clear();load();
   }
   Future<File> confirmationFile(List<String> booking)async{
     if(booking.length>10&&booking[10].isNotEmpty){final existing=File(booking[10]);if(await existing.exists())return existing;}
@@ -603,7 +646,7 @@ class _BookingsPageState extends State<BookingsPage>{
       if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Add the customer phone number before sending confirmation.')));return;
     }
     String displayDate(String value){final d=DateTime.tryParse(value);return d==null?value:DateFormat('dd MMM yyyy').format(d);}
-    final message='Booking Confirmed!\n\nBooking ID: ${booking[0]}\nCustomer: ${customerLabel(customerId)}\nCar: ${carLabel(booking.length>2?booking[2]:'')}\nPickup: ${booking.length>3?displayDate(booking[3]):''}\nReturn: ${booking.length>4?displayDate(booking[4]):''}\nRental Amount: INR ${booking.length>5?booking[5]:''}\n\nThank you for choosing DriveRent.';
+    final message='Booking Confirmed!\n\nBooking ID: ${booking[0]}\nCustomer: ${customerLabel(customerId)}\nVehicle: ${carLabel(booking.length>2?booking[2]:'')}\nPickup: ${booking.length>3?displayDate(booking[3]):''}\nReturn: ${booking.length>4?displayDate(booking[4]):''}\nDaily Rent: INR ${booking.length>12?booking[12]:''}\nRental Amount: INR ${booking.length>5?booking[5]:''}\n\nThank you for choosing GoCar Rental Services.';
     final uri=Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(message)}');
     if(!await launchUrl(uri,mode:LaunchMode.externalApplication)&&mounted){
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('WhatsApp could not be opened.')));
@@ -612,7 +655,7 @@ class _BookingsPageState extends State<BookingsPage>{
   }
   Future<void> shareConfirmation(List<String> booking)async{
     final file=await confirmationFile(booking);
-    await Share.shareXFiles([XFile(file.path)],subject:'DriveRent booking confirmation',
+    await Share.shareXFiles([XFile(file.path)],subject:'GoCar Rental Services booking confirmation',
       text:'QR-coded booking confirmation for ${customerLabel(booking.length>1?booking[1]:'')}. Select WhatsApp to send it.');
     await load();
   }
@@ -625,9 +668,13 @@ class _BookingsPageState extends State<BookingsPage>{
       onChanged:(v)=>setState(()=>selectedCustomerId=v)),
     const SizedBox(height:8),
     DropdownButtonFormField<String>(value:selectedCarId,isExpanded:true,
-      decoration:const InputDecoration(labelText:'Select car',border:OutlineInputBorder()),
+      decoration:const InputDecoration(labelText:'Select vehicle',border:OutlineInputBorder()),
       items:cars.map((r)=>DropdownMenuItem(value:r[0],child:Text('${carLabel(r[0])} • INR ${r.length>3?r[3]:'0'}/day'))).toList(),
-      onChanged:(v)=>setState((){selectedCarId=v;recalculate();})),
+      onChanged:(v)=>setState((){selectedCarId=v;bookingRate.text=defaultDailyRate.toStringAsFixed(2);recalculate();})),
+    const SizedBox(height:8),
+    TextField(controller:bookingRate,keyboardType:const TextInputType.numberWithOptions(decimal:true),
+      decoration:const InputDecoration(labelText:'Daily rent for this booking (INR)',border:OutlineInputBorder()),
+      onChanged:(_)=>setState(recalculate)),
     const SizedBox(height:8),
     Row(children:[Expanded(child:Text('Pickup: ${DateFormat('dd MMM yyyy').format(pickup)}')),TextButton(onPressed:()=>pick(true),child:const Text('Change'))]),
     Row(children:[Expanded(child:Text('Return: ${DateFormat('dd MMM yyyy').format(ret)}')),TextButton(onPressed:()=>pick(false),child:const Text('Change'))]),
@@ -645,7 +692,8 @@ class _BookingsPageState extends State<BookingsPage>{
         final total=r.length>5?double.tryParse(r[5])??0:0;
         final paid=paidFor(r[0]);final due=(total-paid)<0?0:total-paid;
         final workflow=r.length>7?r[7]:'Booked';final payment=r.length>11?r[11]:(due<=0?'Paid':paid>0?'Partially Paid':'Pending');
-        return Text('${customerLabel(r.length>1?r[1]:'')} • ${carLabel(r.length>2?r[2]:'')}\n$workflow • Payment: $payment\nTotal: INR ${total.toStringAsFixed(2)} • Paid: INR ${paid.toStringAsFixed(2)} • Due: INR ${due.toStringAsFixed(2)}');}),
+        final rate=r.length>12?r[12]:'';
+        return Text('${customerLabel(r.length>1?r[1]:'')} • ${carLabel(r.length>2?r[2]:'')}\n$workflow • Payment: $payment${rate.isEmpty?'':' • INR $rate/day'} • ${documentStatus(r.length>1?r[1]:'')}\nTotal: INR ${total.toStringAsFixed(2)} • Paid: INR ${paid.toStringAsFixed(2)} • Due: INR ${due.toStringAsFixed(2)}');}),
       isThreeLine:true,
       trailing:PopupMenuButton<String>(
         onSelected:(value){
@@ -666,6 +714,9 @@ class _BookingsPageState extends State<BookingsPage>{
             Navigator.of(context).push(MaterialPageRoute(builder:(_)=>WhatsAppTemplatesPage(
               booking:r,customerName:customerLabel(r.length>1?r[1]:''),
               customerPhone:customerPhone(r.length>1?r[1]:''),carName:carLabel(r.length>2?r[2]:''))));
+          }else if(value=='documents'){
+            Navigator.of(context).push(MaterialPageRoute(builder:(_)=>CustomerDocumentsPage(
+              initialCustomerId:r.length>1?r[1]:null)));
           }else if(value=='delete'){
             remove(r[0]);
           }
@@ -685,11 +736,15 @@ class _BookingsPageState extends State<BookingsPage>{
             leading:Icon(Icons.sync_alt),title:Text('Change booking status'))),
           PopupMenuItem(value:'messages',child:ListTile(
             leading:Icon(Icons.message),title:Text('WhatsApp templates'))),
+          PopupMenuItem(value:'documents',child:ListTile(
+            leading:Icon(Icons.badge),title:Text('Customer documents'))),
           PopupMenuItem(value:'delete',child:ListTile(
             leading:Icon(Icons.delete_outline),title:Text('Delete booking'))),
         ],
       ))))
   ]);
+
+  @override void dispose(){amount.dispose();deposit.dispose();bookingRate.dispose();super.dispose();}
 }
 
 class AgreementPage extends StatefulWidget {
@@ -890,7 +945,7 @@ class _PaymentsPageState extends State<PaymentsPage>{
     final requestText=token
       ?'Please send INR 500 as the token amount using the attached QR code to confirm your booking.'
       :'Please send the remaining booking amount of INR ${amountToRequest.toStringAsFixed(2)} using the attached QR code.';
-    final message='Hello $customer,\n\n$requestText\n\nBooking ID: ${booking[0]}\nTotal Booking Amount: INR ${totalFor(booking[0]).toStringAsFixed(2)}\nAmount Received: INR ${paidFor(booking[0]).toStringAsFixed(2)}\nRemaining Balance: INR ${balance.toStringAsFixed(2)}\nUPI ID: dineshjaware212@okhdfcbank\n\nThank you,\nDriveRent';
+    final message='Hello $customer,\n\n$requestText\n\nBooking ID: ${booking[0]}\nTotal Booking Amount: INR ${totalFor(booking[0]).toStringAsFixed(2)}\nAmount Received: INR ${paidFor(booking[0]).toStringAsFixed(2)}\nRemaining Balance: INR ${balance.toStringAsFixed(2)}\nUPI ID: dineshjaware212@okhdfcbank\n\nThank you,\nGoCar Rental Services';
     final qr=await paymentQrFile();
     await Share.shareXFiles([XFile(qr.path)],subject:token?'Token payment request':'Remaining payment request',
       text:'$message\n\nSelect WhatsApp and choose the customer to send this payment request.');
@@ -967,7 +1022,7 @@ class _MaintenancePageState extends State<MaintenancePage>{
   Future<void> remove(String x)async{await db.deleteById('Maintenance',x);load();}
   @override Widget build(BuildContext c)=>ListView(padding:const EdgeInsets.all(12),children:[
     const Text('Maintenance',style:TextStyle(fontSize:26,fontWeight:FontWeight.bold)),
-    field(car,'Car ID / registration'),field(desc,'Service description'),field(cost,'Estimated cost (INR)',number:true),
+    field(car,'Vehicle ID / registration'),field(desc,'Service description'),field(cost,'Estimated cost (INR)',number:true),
     FilledButton.icon(onPressed:add,icon:const Icon(Icons.build),label:const Text('Add Service')),
     ...data.map((r)=>Card(child:ListTile(
       title:Text(r.length>2?r[2]:''),subtitle:Text('Car: ${r.length>1?r[1]:''} • ₹${r.length>5?r[5]:''} • ${r.length>3?r[3]:''}'),

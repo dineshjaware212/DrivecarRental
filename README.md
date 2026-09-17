@@ -1,16 +1,16 @@
-# DriveRent Manager v9
+# GoCar Rental Services v2.3
 
-Android-only self-drive car rental manager with a local XLSX database.
+Android-only car and two-wheeler rental manager with a local XLSX database.
 
 ## Automatic booking totals and payment balances
 
-Bookings use customer and car selectors. The rental total is calculated automatically from the number of rental days and the selected car's daily rate. The Payments screen shows the booking total, payments already received, and the remaining balance; the payment amount is automatically filled with the current balance and may be changed for a partial payment.
+Bookings use customer and vehicle selectors. Every booking has an editable daily rent, initially copied from the vehicle's default rate. The total updates automatically from the rental period and this customer-specific rate. The Payments screen shows the booking total, payments already received, and the remaining balance.
 
 The app also prevents overlapping bookings for the same car, updates each booking to **Partially Paid** or **Paid**, displays collected and outstanding totals on the dashboard, provides a payment-method selector, and requires the customer to review and accept the terms before signing.
 
-## Car catalog and booking confirmation
+## Vehicle catalog and booking confirmation
 
-Upload a photo from each car's menu. Open the catalog from the photo icon in the app bar to view currently available cars and share a photo catalog PDF through WhatsApp.
+Add cars or two-wheelers, upload a photo from each vehicle's menu, and share a PDF catalog of currently available vehicles through WhatsApp.
 
 From a booking's menu, **Confirm & message customer** creates a QR-coded confirmation PDF, stores it with the booking, marks the confirmation as completed, and opens the customer's WhatsApp chat with a prepared confirmation message. WhatsApp requires the user to tap **Send**. Use **Share QR confirmation** to attach the QR-coded PDF through WhatsApp.
 
@@ -36,7 +36,13 @@ Each booking menu now also includes:
 
 ## Phone contacts
 
-On the **Customers** screen, tap **Select from Phone Contacts**. Android opens its native contact picker and fills in the selected contact's name and first phone number. The app only receives the contact selected by the user.
+On the **Customers** screen, tap **Select Contact & Add Customer**. After contacts permission is granted, Android opens its native picker. The app reads only the selected contact's name and first phone number and immediately creates the customer.
+
+## Booking documents and invoices
+
+Each booking menu includes **Customer documents**, which opens the selected customer's licence, Aadhaar/ID, PAN, and licence-expiry records for upload or replacement. **Share invoice / receipt** generates a detailed PDF with invoice number and date, customer and vehicle details, rental period, booking-specific daily rent, security deposit, payment history, amount received, and balance due.
+
+Dashboard summary cards are clickable and switch directly to Vehicles, Customers, Bookings, Payments, or Service.
 
 ## Signed rental agreements
 
@@ -65,7 +71,7 @@ Version 2.0.4 uses the GitHub Runner's confirmed absolute SDK Manager path, `$AN
 
 This version follows the supplied working reference project. It never invokes `sdkmanager`. After stable Flutter creates the Android wrapper, the workflows set the generated app module to `compileSdk 36` and build the release APK.
 
-- **GitHub:** Actions → Build DriveRent Manager APK → Run workflow → download `DriveRent-Manager-APK` from Artifacts.
+- **GitHub:** Actions → Build GoCar Rental Services APK → Run workflow → download `GoCar-Rental-Services-APK` from Artifacts.
 - **Codemagic:** Run the `android-release` workflow and download `app-release.apk` from Artifacts.
 - **Windows PC:** Double-click `build_apk.bat` after installing Flutter and Android SDK 36.
 - **macOS/Linux:** Run `chmod +x build_apk.sh`, then `./build_apk.sh`.
@@ -73,3 +79,5 @@ This version follows the supplied working reference project. It never invokes `s
 The generated APK location is `build/app/outputs/flutter-apk/app-release.apk`. The project uses `file_picker 10.3.3`.
 
 Version 2.1.1 resolves Flutter analysis errors by hiding Excel's conflicting `Border` type and including a widget test that uses the correct `DriveRentApp` root widget instead of Flutter's default `MyApp` placeholder.
+
+Version 2.3.0 adds cars and two-wheelers throughout the app, customer-specific booking rates, clickable dashboard navigation, booking-linked customer documents, contact-to-customer creation, GoCar Rental Services branding, and detailed invoice/receipt PDFs.

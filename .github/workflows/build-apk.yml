@@ -1,4 +1,4 @@
-name: Build DriveRent Manager APK
+name: Build GoCar Rental Services APK
 on:
   workflow_dispatch:
   push:
@@ -31,11 +31,17 @@ jobs:
             sed -i 's/compileSdkVersion [0-9][0-9]*/compileSdkVersion 36/g' android/app/build.gradle
           fi
           grep -R "compileSdk" android/app/build.gradle* || true
+      - name: Configure app name and contacts permission
+        run: |
+          sed -i 's/android:label="driverent_manager"/android:label="GoCar Rental Services"/' android/app/src/main/AndroidManifest.xml
+          if ! grep -q 'android.permission.READ_CONTACTS' android/app/src/main/AndroidManifest.xml; then
+            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.READ_CONTACTS" />' android/app/src/main/AndroidManifest.xml
+          fi
       - run: flutter pub get
       - run: flutter analyze --no-fatal-infos
       - run: flutter build apk --release --no-pub
       - uses: actions/upload-artifact@v4
         with:
-          name: DriveRent-Manager-APK
+          name: GoCar-Rental-Services-APK
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error

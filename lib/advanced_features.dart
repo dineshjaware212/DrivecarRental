@@ -70,18 +70,19 @@ class _AvailabilityPageState extends State<AvailabilityPage>{
       const SizedBox(height:8),
       ...cars.map((car){final available=free(car);return Card(child:ListTile(
         leading:Icon(available?Icons.check_circle:Icons.block,color:available?Colors.green:Colors.red),
-        title:Text(car.length>1?car[1]:'Car'),subtitle:Text('${car.length>2?car[2]:''} • INR ${car.length>3?car[3]:'0'}/day'),
+        title:Text(car.length>1?car[1]:'Vehicle'),subtitle:Text('${car.length>7?car[7]:'Car'} • ${car.length>2?car[2]:''} • INR ${car.length>3?car[3]:'0'}/day'),
         trailing:Text(available?'AVAILABLE':'BOOKED',style:TextStyle(fontWeight:FontWeight.bold,color:available?Colors.green:Colors.red))));}),
     ]));
 }
 
 class CustomerDocumentsPage extends StatefulWidget{
-  const CustomerDocumentsPage({super.key});
+  final String? initialCustomerId;
+  const CustomerDocumentsPage({super.key,this.initialCustomerId});
   @override State<CustomerDocumentsPage> createState()=>_CustomerDocumentsPageState();
 }
 class _CustomerDocumentsPageState extends State<CustomerDocumentsPage>{
   List<List<String>> customers=[];String? customerId;DateTime? expiry;
-  @override void initState(){super.initState();load();}
+  @override void initState(){super.initState();customerId=widget.initialCustomerId;load();}
   Future<void> load()async{customers=await db.rows('Customers');if(mounted)setState((){});}
   List<String>? get customer{for(final r in customers){if(r.isNotEmpty&&r[0]==customerId)return r;}return null;}
   Future<void> upload(int column,String header,String label)async{
@@ -185,7 +186,8 @@ class _ReturnChargesPageState extends State<ReturnChargesPage>{
   Future<void> load()async{
     returns=await db.rows('Returns');final inspections=await db.rows('Inspections');final cars=await db.rows('Cars');
     for(final r in inspections.reversed){if(r.length>3&&r[1]==widget.booking[0]&&r[2]=='Pickup'){pickupOdo=double.tryParse(r[3])??0;break;}}
-    for(final r in cars){if(r.isNotEmpty&&r[0]==widget.booking[2]){dailyRate=r.length>3?double.tryParse(r[3])??0:0;sevenSeater=r.length>1&&r[1].contains('7');break;}}
+    dailyRate=widget.booking.length>12?double.tryParse(widget.booking[12])??0:0;
+    for(final r in cars){if(r.isNotEmpty&&r[0]==widget.booking[2]){if(dailyRate==0)dailyRate=r.length>3?double.tryParse(r[3])??0:0;sevenSeater=r.length>1&&r[1].contains('7');break;}}
     if(mounted)setState((){});
   }
   Future<void> save()async{
@@ -217,16 +219,33 @@ Future<void> showBookingStatusDialog(BuildContext context,List<String> booking,F
 }
 
 Future<void> shareBookingInvoice(List<String> booking,List<List<String>> customers,List<List<String>> cars,List<List<String>> payments)async{
-  String customer=booking.length>1?booking[1]:'';String car=booking.length>2?booking[2]:'';
-  for(final r in customers){if(r.isNotEmpty&&r[0]==customer){customer=r.length>1?r[1]:customer;break;}}
-  for(final r in cars){if(r.isNotEmpty&&r[0]==car){car=r.length>2?'${r[1]} (${r[2]})':r[1];break;}}
+  String customer=booking.length>1?booking[1]:'';String phone='';String car=booking.length>2?booking[2]:'';
+  for(final r in customers){if(r.isNotEmpty&&r[0]==customer){customer=r.length>1?r[1]:customer;phone=r.length>2?r[2]:'';break;}}
+  for(final r in cars){if(r.isNotEmpty&&r[0]==car){final type=r.length>7?r[7]:'Car';car=r.length>2?'$type • ${r[1]} (${r[2]})':'$type • ${r[1]}';break;}}
   final total=booking.length>5?double.tryParse(booking[5])??0:0;
-  final paid=payments.where((r)=>r.length>2&&r[1]==booking[0]).fold<double>(0,(s,r)=>s+(double.tryParse(r[2])??0));final due=(total-paid)<0?0:total-paid;
-  final pdf=pw.Document();pdf.addPage(pw.Page(build:(_)=>pw.Column(crossAxisAlignment:pw.CrossAxisAlignment.start,children:[
-    pw.Text(due<=0?'PAYMENT RECEIPT':'RENTAL INVOICE',style:pw.TextStyle(fontSize:22,fontWeight:pw.FontWeight.bold)),pw.SizedBox(height:16),
-    AgreementService._pdfSection('Details',[[ 'Booking ID',booking[0]],['Customer',customer],['Vehicle',car],['Rental total','INR ${total.toStringAsFixed(2)}'],['Amount paid','INR ${paid.toStringAsFixed(2)}'],['Balance due','INR ${due.toStringAsFixed(2)}'],['Status',booking.length>7?booking[7]:'']]),
-    pw.Text('Thank you for choosing DriveRent.'),
-  ])));
+  final bookingPayments=payments.where((r)=>r.length>2&&r[1]==booking[0]).toList();
+  final paid=bookingPayments.fold<double>(0,(s,r)=>s+(double.tryParse(r[2])??0));final due=(total-paid)<0?0:total-paid;
+  final start=booking.length>3?DateTime.tryParse(booking[3]):null,end=booking.length>4?DateTime.tryParse(booking[4]):null;
+  final days=start==null||end==null?1:(end.difference(start).inDays<1?1:end.difference(start).inDays);
+  final rate=booking.length>12?double.tryParse(booking[12])??(total/days):(total/days);
+  String date(DateTime? value)=>value==null?'':DateFormat('dd MMM yyyy').format(value);
+  final invoiceNo='GCR-${shortBookingId(booking[0])}';
+  final pdf=pw.Document();pdf.addPage(pw.MultiPage(pageFormat:PdfPageFormat.a4,margin:const pw.EdgeInsets.all(36),build:(_)=>[
+    pw.Row(mainAxisAlignment:pw.MainAxisAlignment.spaceBetween,crossAxisAlignment:pw.CrossAxisAlignment.start,children:[
+      pw.Column(crossAxisAlignment:pw.CrossAxisAlignment.start,children:[pw.Text('GoCar Rental Services',style:pw.TextStyle(fontSize:20,fontWeight:pw.FontWeight.bold)),pw.Text('Vehicle Rental Invoice')]),
+      pw.Column(crossAxisAlignment:pw.CrossAxisAlignment.end,children:[pw.Text(due<=0?'PAID RECEIPT':'RENTAL INVOICE',style:pw.TextStyle(fontSize:18,fontWeight:pw.FontWeight.bold)),pw.Text('Invoice: $invoiceNo'),pw.Text('Date: ${date(DateTime.now())}')]),
+    ]),pw.SizedBox(height:20),
+    AgreementService._pdfSection('Customer and booking',[[ 'Customer',customer],['Phone',phone],['Booking ID',booking[0]],['Vehicle',car],['Rental period','${date(start)} to ${date(end)}'],['Booking status',booking.length>7?booking[7]:'']]),
+    pw.TableHelper.fromTextArray(headers:['Description','Qty','Rate','Amount'],data:[
+      ['Vehicle rental','$days day${days==1?'':'s'}','INR ${rate.toStringAsFixed(2)}','INR ${total.toStringAsFixed(2)}'],
+      ['Refundable security deposit','1','INR ${booking.length>6?booking[6]:'0'}','Not included'],
+    ],headerStyle:pw.TextStyle(fontWeight:pw.FontWeight.bold),cellStyle:const pw.TextStyle(fontSize:10),cellPadding:const pw.EdgeInsets.all(7)),
+    pw.SizedBox(height:14),
+    AgreementService._pdfSection('Payment summary',[[ 'Rental total','INR ${total.toStringAsFixed(2)}'],['Amount received','INR ${paid.toStringAsFixed(2)}'],['Balance due','INR ${due.toStringAsFixed(2)}']]),
+    if(bookingPayments.isNotEmpty)...[pw.Text('Payment history',style:pw.TextStyle(fontSize:13,fontWeight:pw.FontWeight.bold)),pw.SizedBox(height:6),
+      pw.TableHelper.fromTextArray(headers:['Date','Method','Amount'],data:bookingPayments.map((r)=>[r.length>4?r[4]:'',r.length>3?r[3]:'', 'INR ${r[2]}']).toList(),headerStyle:pw.TextStyle(fontWeight:pw.FontWeight.bold),cellStyle:const pw.TextStyle(fontSize:9))],
+    pw.SizedBox(height:20),pw.Text('Thank you for choosing GoCar Rental Services.'),
+  ],footer:(context)=>pw.Align(alignment:pw.Alignment.centerRight,child:pw.Text('Page ${context.pageNumber} of ${context.pagesCount}',style:const pw.TextStyle(fontSize:9)))));
   final root=await getApplicationDocumentsDirectory();final dir=Directory('${root.path}/invoices');await dir.create(recursive:true);
   final file=File('${dir.path}/${due<=0?'Receipt':'Invoice'}_${shortBookingId(booking[0])}.pdf');await file.writeAsBytes(await pdf.save(),flush:true);
   await Share.shareXFiles([XFile(file.path)],text:'${due<=0?'Payment receipt':'Rental invoice'} for booking ${shortBookingId(booking[0])}');
@@ -238,19 +257,19 @@ class WhatsAppTemplatesPage extends StatelessWidget{
   Future<void> send(BuildContext context,String title,String body)async{
     var phone=customerPhone.replaceAll(RegExp(r'[^0-9]'),'');if(phone.length==10)phone='91$phone';
     if(phone.isEmpty){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Customer phone number is missing.')));return;}
-    final message='Hello $customerName,\n\n$body\n\nBooking: ${shortBookingId(booking[0])}\nVehicle: $carName\n\nThank you,\nDriveRent';
+    final message='Hello $customerName,\n\n$body\n\nBooking: ${shortBookingId(booking[0])}\nVehicle: $carName\n\nThank you,\nGoCar Rental Services';
     await launchUrl(Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(message)}'),mode:LaunchMode.externalApplication);
   }
   @override Widget build(BuildContext context){
     final templates=<String,String>{
       'Token Payment Request':'Please pay the INR 500 token amount to confirm your booking.',
-      'Booking Confirmation':'Your self-drive car booking is confirmed.',
+      'Booking Confirmation':'Your self-drive vehicle booking is confirmed.',
       'Pickup Reminder':'This is a reminder that your vehicle pickup is scheduled soon. Please carry your original driving licence and ID proof.',
       'Documents Required':'Please share your valid driving licence, Aadhaar or ID proof, and address proof to complete the booking.',
       'Remaining Payment':'Please pay the remaining booking amount before vehicle delivery.',
       'Return Reminder':'This is a reminder to return the vehicle at the agreed date and time to avoid late charges.',
       'Late Return Warning':'The vehicle return is overdue. A late fee of INR 200 per hour applies, and after three hours an additional day charge applies.',
-      'Thank You':'Thank you for choosing DriveRent. We hope you had a safe and pleasant journey.',
+      'Thank You':'Thank you for choosing GoCar Rental Services. We hope you had a safe and pleasant journey.',
     };
     return Scaffold(appBar:AppBar(title:const Text('WhatsApp Templates')),body:ListView(padding:const EdgeInsets.all(14),children:templates.entries.map((e)=>Card(child:ListTile(
       leading:const Icon(Icons.chat,color:Colors.green),title:Text(e.key),subtitle:Text(e.value,maxLines:2,overflow:TextOverflow.ellipsis),trailing:const Icon(Icons.send),onTap:()=>send(context,e.key,e.value)))).toList()));
