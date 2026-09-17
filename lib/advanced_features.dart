@@ -121,6 +121,44 @@ class _CustomerDocumentsPageState extends State<CustomerDocumentsPage>{
   }
 }
 
+class BookingHandoverPage extends StatefulWidget{
+  final List<String> booking;
+  const BookingHandoverPage({super.key,required this.booking});
+  @override State<BookingHandoverPage> createState()=>_BookingHandoverPageState();
+}
+class _BookingHandoverPageState extends State<BookingHandoverPage>{
+  final pickupOdometer=TextEditingController(),dropOdometer=TextEditingController(),pickupFuel=TextEditingController(),dropFuel=TextEditingController();
+  String pickupPhoto='',dropPhoto='';bool saving=false;
+  String cell(int index)=>widget.booking.length>index?widget.booking[index]:'';
+  @override void initState(){super.initState();pickupOdometer.text=cell(13);dropOdometer.text=cell(14);pickupFuel.text=cell(15);dropFuel.text=cell(16);pickupPhoto=cell(17);dropPhoto=cell(18);}
+  Future<void> pickPhoto(bool pickup)async{
+    final result=await FilePicker.platform.pickFiles(type:FileType.image);final source=result?.files.single.path;if(source==null)return;
+    final root=await getApplicationDocumentsDirectory();final dir=Directory('${root.path}/booking_odometer_photos');await dir.create(recursive:true);
+    final ext=source.contains('.')?source.substring(source.lastIndexOf('.')):'.jpg';final target=File('${dir.path}/${widget.booking[0]}_${pickup?'pickup':'drop'}$ext');await File(source).copy(target.path);
+    if(mounted)setState((){if(pickup){pickupPhoto=target.path;}else{dropPhoto=target.path;}});
+  }
+  Future<void> save()async{
+    final pickupKm=double.tryParse(pickupOdometer.text),dropKm=double.tryParse(dropOdometer.text),pickupPct=double.tryParse(pickupFuel.text),dropPct=double.tryParse(dropFuel.text);
+    if((pickupKm!=null&&dropKm!=null&&dropKm<pickupKm)||(pickupPct!=null&&(pickupPct<0||pickupPct>100))||(dropPct!=null&&(dropPct<0||dropPct>100))){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Check odometer readings and enter fuel levels between 0 and 100.')));return;}
+    setState(()=>saving=true);final id=widget.booking[0];
+    await db.setValueById('Bookings',id,13,pickupOdometer.text.trim(),header:'pickup_odometer');await db.setValueById('Bookings',id,14,dropOdometer.text.trim(),header:'drop_odometer');
+    await db.setValueById('Bookings',id,15,pickupFuel.text.trim(),header:'pickup_fuel');await db.setValueById('Bookings',id,16,dropFuel.text.trim(),header:'drop_fuel');
+    await db.setValueById('Bookings',id,17,pickupPhoto,header:'pickup_odometer_photo');await db.setValueById('Bookings',id,18,dropPhoto,header:'drop_odometer_photo');
+    if(mounted){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Pickup and drop readings saved.')));Navigator.pop(context);}
+  }
+  Widget photoCard(String title,String path,VoidCallback choose)=>Card(child:Padding(padding:const EdgeInsets.all(10),child:Column(children:[
+    if(path.isNotEmpty&&File(path).existsSync())ClipRRect(borderRadius:BorderRadius.circular(8),child:Image.file(File(path),height:130,width:double.infinity,fit:BoxFit.cover))
+    else const SizedBox(height:90,child:Center(child:Icon(Icons.add_a_photo,size:42))),
+    SizedBox(width:double.infinity,child:OutlinedButton.icon(onPressed:choose,icon:const Icon(Icons.camera_alt),label:Text(path.isEmpty?'Add $title':'Replace $title'))),
+  ])));
+  @override void dispose(){pickupOdometer.dispose();dropOdometer.dispose();pickupFuel.dispose();dropFuel.dispose();super.dispose();}
+  @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:Text('Pickup / Drop • ${shortBookingId(widget.booking[0])}')),body:ListView(padding:const EdgeInsets.all(14),children:[
+    const Text('Pickup readings',style:TextStyle(fontSize:18,fontWeight:FontWeight.bold)),field(pickupOdometer,'Pickup odometer (km)',number:true),field(pickupFuel,'Pickup fuel level (%)',number:true),photoCard('pickup odometer photo',pickupPhoto,()=>pickPhoto(true)),
+    const SizedBox(height:12),const Text('Drop readings',style:TextStyle(fontSize:18,fontWeight:FontWeight.bold)),field(dropOdometer,'Drop odometer (km)',number:true),field(dropFuel,'Drop fuel level (%)',number:true),photoCard('drop odometer photo',dropPhoto,()=>pickPhoto(false)),
+    const SizedBox(height:8),FilledButton.icon(onPressed:saving?null:save,icon:const Icon(Icons.save),label:const Text('Save Pickup / Drop Details')),
+  ]));
+}
+
 class BookingEditPage extends StatefulWidget{
   final List<String> booking;
   const BookingEditPage({super.key,required this.booking});
@@ -240,38 +278,45 @@ class ReturnChargesPage extends StatefulWidget{
   @override State<ReturnChargesPage> createState()=>_ReturnChargesPageState();
 }
 class _ReturnChargesPageState extends State<ReturnChargesPage>{
-  final returnOdo=TextEditingController(),lateHours=TextEditingController(),fuelCharge=TextEditingController(),damageCharge=TextEditingController(),washingCharge=TextEditingController();
-  double pickupOdo=0,dailyRate=0;bool sevenSeater=false;List<List<String>> returns=[];
-  int get days{final s=DateTime.tryParse(widget.booking[3]),e=DateTime.tryParse(widget.booking[4]);if(s==null||e==null)return 1;final d=e.difference(s).inDays;return d<1?1:d;}
+  final returnOdo=TextEditingController(),lateHours=TextEditingController(),damageCharge=TextEditingController(),washingCharge=TextEditingController();
+  double pickupOdo=0,pickupFuel=0,dropFuel=0,dailyRate=0;bool isErtiga=false;List<List<String>> returns=[];
+  int get days{final s=DateTime.tryParse(widget.booking[3]),e=DateTime.tryParse(widget.booking[4]);if(s==null||e==null)return 1;final d=(e.difference(s).inMinutes/1440).ceil();return d<1?1:d;}
   double n(TextEditingController c)=>double.tryParse(c.text)??0;
   double get extraKm{final value=n(returnOdo)-pickupOdo-(days*350);return value<0?0:value;}
-  double get kmCharge=>extraKm*(sevenSeater?7:5);
+  double get extraKmRate=>isErtiga?7:5;
+  double get kmCharge=>extraKm*extraKmRate;
+  double get fuelUsed{final value=pickupFuel-dropFuel;return value<0?0:value;}
+  double get fuelCharge=>fuelUsed*0.5*112;
   double get lateFee{final h=n(lateHours);return h>3?dailyRate:h*200;}
-  double get total=>kmCharge+lateFee+n(fuelCharge)+n(damageCharge)+n(washingCharge);
-  @override void initState(){super.initState();for(final c in [returnOdo,lateHours,fuelCharge,damageCharge,washingCharge]){c.addListener(changed);}load();}
+  double get total=>kmCharge+lateFee+fuelCharge+n(damageCharge)+n(washingCharge);
+  @override void initState(){super.initState();pickupOdo=widget.booking.length>13?double.tryParse(widget.booking[13])??0:0;returnOdo.text=widget.booking.length>14?widget.booking[14]:'';pickupFuel=widget.booking.length>15?double.tryParse(widget.booking[15])??0:0;dropFuel=widget.booking.length>16?double.tryParse(widget.booking[16])??0:0;for(final c in [returnOdo,lateHours,damageCharge,washingCharge]){c.addListener(changed);}load();}
   void changed(){if(mounted)setState((){});}
   Future<void> load()async{
     returns=await db.rows('Returns');final inspections=await db.rows('Inspections');final cars=await db.rows('Cars');
-    for(final r in inspections.reversed){if(r.length>3&&r[1]==widget.booking[0]&&r[2]=='Pickup'){pickupOdo=double.tryParse(r[3])??0;break;}}
+    if(pickupOdo==0){for(final r in inspections.reversed){if(r.length>3&&r[1]==widget.booking[0]&&r[2]=='Pickup'){pickupOdo=double.tryParse(r[3])??0;break;}}}
     dailyRate=widget.booking.length>12?double.tryParse(widget.booking[12])??0:0;
-    for(final r in cars){if(r.isNotEmpty&&r[0]==widget.booking[2]){if(dailyRate==0)dailyRate=r.length>3?double.tryParse(r[3])??0:0;sevenSeater=r.length>1&&r[1].contains('7');break;}}
+    for(final r in cars){if(r.isNotEmpty&&r[0]==widget.booking[2]){if(dailyRate==0){dailyRate=r.length>3?double.tryParse(r[3])??0:0;}isErtiga=r.length>1&&r[1].toLowerCase().contains('ertiga');break;}}
     if(mounted)setState((){});
   }
   Future<void> save()async{
     if(returns.any((r)=>r.length>1&&r[1]==widget.booking[0])){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Return charges have already been recorded for this booking.')));return;}
-    await db.add('Returns',[newId(),widget.booking[0],n(returnOdo),extraKm,kmCharge,n(lateHours),lateFee,n(fuelCharge),n(damageCharge),n(washingCharge),total,DateTime.now().toIso8601String()]);
+    if(pickupOdo<=0||n(returnOdo)<=0){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Add pickup and drop odometer readings before calculating extra charges.')));return;}
+    await db.add('Returns',[newId(),widget.booking[0],n(returnOdo),extraKm,kmCharge,n(lateHours),lateFee,fuelCharge,n(damageCharge),n(washingCharge),total,DateTime.now().toIso8601String()]);
     final oldTotal=widget.booking.length>5?double.tryParse(widget.booking[5])??0:0;
     await db.setValueById('Bookings',widget.booking[0],5,oldTotal+total,header:'amount');
     await db.setValueById('Bookings',widget.booking[0],7,'Payment Pending',header:'status');
     if(mounted){ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Return charges of INR ${total.toStringAsFixed(2)} added.')));Navigator.pop(context);}
   }
-  @override void dispose(){for(final c in [returnOdo,lateHours,fuelCharge,damageCharge,washingCharge]){c.dispose();}super.dispose();}
+  @override void dispose(){for(final c in [returnOdo,lateHours,damageCharge,washingCharge]){c.dispose();}super.dispose();}
   @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('Return & Extra Charges')),body:ListView(padding:const EdgeInsets.all(14),children:[
     Text('Booking ${shortBookingId(widget.booking[0])}',style:Theme.of(context).textTheme.titleLarge),
-    Text('Included mileage: ${days*350} km • Extra rate: INR ${sevenSeater?7:5}/km'),const SizedBox(height:10),
-    field(returnOdo,'Return odometer',number:true),field(lateHours,'Late hours',number:true),field(fuelCharge,'Fuel charge',number:true),field(damageCharge,'Damage charge',number:true),field(washingCharge,'Washing charge',number:true),
+    Text('Pickup: ${pickupOdo.toStringAsFixed(1)} km • Drop: ${n(returnOdo).toStringAsFixed(1)} km'),
+    Text('Included mileage: ${days*350} km • Extra rate: INR ${extraKmRate.toStringAsFixed(0)}/km${isErtiga?' (Ertiga)':''}'),
+    Text('Fuel: ${pickupFuel.toStringAsFixed(1)}% → ${dropFuel.toStringAsFixed(1)}%'),const SizedBox(height:10),
+    field(returnOdo,'Drop odometer',number:true),field(lateHours,'Late hours',number:true),field(damageCharge,'Damage charge',number:true),field(washingCharge,'Washing charge',number:true),
     Card(color:Theme.of(context).colorScheme.primaryContainer,child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-      Text('Extra kilometres: ${extraKm.toStringAsFixed(1)} • INR ${kmCharge.toStringAsFixed(2)}'),Text('Late fee: INR ${lateFee.toStringAsFixed(2)}'),
+      Text('Extra kilometres: ${extraKm.toStringAsFixed(1)} × INR ${extraKmRate.toStringAsFixed(0)} = INR ${kmCharge.toStringAsFixed(2)}'),
+      Text('Fuel used: ${fuelUsed.toStringAsFixed(1)} × 0.5 × 112 = INR ${fuelCharge.toStringAsFixed(2)}'),Text('Late fee: INR ${lateFee.toStringAsFixed(2)}'),
       Text('Total additional charges: INR ${total.toStringAsFixed(2)}',style:const TextStyle(fontSize:18,fontWeight:FontWeight.bold)),
     ]))),FilledButton.icon(onPressed:save,icon:const Icon(Icons.save),label:const Text('Apply Return Charges')),
   ]));

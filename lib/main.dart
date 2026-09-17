@@ -70,7 +70,7 @@ class LocalExcelDb {
     e.delete('Sheet1');
     e['Cars'].appendRow(toCellValues(['id','name','registration','daily_rate','status','odometer','photo_path','vehicle_type']));
     e['Customers'].appendRow(toCellValues(['id','name','phone','license_number','address','notes']));
-    e['Bookings'].appendRow(toCellValues(['id','customer_id','car_id','pickup_at','return_at','amount','deposit','status','agreement_path','confirmation_status','confirmation_path','payment_status','daily_rate']));
+    e['Bookings'].appendRow(toCellValues(['id','customer_id','car_id','pickup_at','return_at','amount','deposit','status','agreement_path','confirmation_status','confirmation_path','payment_status','daily_rate','pickup_odometer','drop_odometer','pickup_fuel','drop_fuel','pickup_odometer_photo','drop_odometer_photo']));
     e['Payments'].appendRow(toCellValues(['id','booking_id','amount','method','paid_at','notes']));
     e['Maintenance'].appendRow(toCellValues(['id','car_id','description','status','scheduled_at','cost','notes']));
     e['Settings'].appendRow(toCellValues(['business_name','currency']));
@@ -86,7 +86,7 @@ class LocalExcelDb {
     }
     final requiredHeaders=<String,Map<int,String>>{
       'Cars':{7:'vehicle_type'},
-      'Bookings':{12:'daily_rate'},
+      'Bookings':{12:'daily_rate',13:'pickup_odometer',14:'drop_odometer',15:'pickup_fuel',16:'drop_fuel',17:'pickup_odometer_photo',18:'drop_odometer_photo'},
     };
     for(final sheetEntry in requiredHeaders.entries){
       for(final columnEntry in sheetEntry.value.entries){
@@ -623,12 +623,23 @@ class BookingsPage extends StatefulWidget {
 }
 class _BookingsPageState extends State<BookingsPage>{
   List<List<String>> data=[],customers=[],cars=[],payments=[];
-  final amount=TextEditingController(),deposit=TextEditingController(),bookingRate=TextEditingController(),customerQuery=TextEditingController();
+  final amount=TextEditingController(),deposit=TextEditingController(),bookingRate=TextEditingController(),customerQuery=TextEditingController(),bookingQuery=TextEditingController();
   String? selectedCustomerId,selectedCarId;
+  String statusFilter='All';
   DateTime pickup=DateTime.now(), ret=DateTime.now().add(const Duration(days:1));
   @override void initState(){super.initState();load();}
   int get rentalDays {final d=(ret.difference(pickup).inMinutes/1440).ceil();return d<1?1:d;}
   List<List<String>> get filteredCustomers{final q=customerQuery.text.trim().toLowerCase();return q.isEmpty?customers:customers.where((r)=>r.isNotEmpty&&(r[0]==selectedCustomerId||r.skip(1).take(2).any((v)=>v.toLowerCase().contains(q)))).toList();}
+  List<List<String>> get filteredBookings{
+    final q=bookingQuery.text.trim().toLowerCase();
+    return data.where((r){
+      final status=r.length>7?r[7]:'Booked';
+      final matchesStatus=statusFilter=='All'||status==statusFilter;
+      final customer=customerLabel(r.length>1?r[1]:'').toLowerCase();
+      final matchesCustomer=q.isEmpty||customer.contains(q)||(r.isNotEmpty&&shortBookingId(r[0]).toLowerCase().contains(q));
+      return matchesStatus&&matchesCustomer;
+    }).toList();
+  }
   double get defaultDailyRate {
     for(final r in cars){if(r.isNotEmpty&&r[0]==selectedCarId)return r.length>3?double.tryParse(r[3])??0:0;}
     return 0;
@@ -743,7 +754,13 @@ class _BookingsPageState extends State<BookingsPage>{
       ]))),
     field(deposit,'Security deposit value (INR)',number:true),
     FilledButton.icon(onPressed:add,icon:const Icon(Icons.event_available),label:const Text('Create Booking')),
-    ...data.map((r){final workflow=r.length>7?r[7]:'Booked';final color=bookingStatusColor(workflow);return Card(child:ListTile(
+    const Divider(height:28),
+    const Text('Filter Bookings',style:TextStyle(fontWeight:FontWeight.bold)),const SizedBox(height:8),
+    TextField(controller:bookingQuery,decoration:const InputDecoration(prefixIcon:Icon(Icons.search),labelText:'Customer name or booking ID',border:OutlineInputBorder()),onChanged:(_)=>setState((){})),const SizedBox(height:8),
+    DropdownButtonFormField<String>(key:ValueKey(statusFilter),initialValue:statusFilter,decoration:const InputDecoration(labelText:'Booking status',border:OutlineInputBorder()),
+      items:['All',...bookingStatuses].map((s)=>DropdownMenuItem(value:s,child:Text(s))).toList(),onChanged:(v)=>setState(()=>statusFilter=v??'All')),
+    const SizedBox(height:8),
+    ...filteredBookings.map((r){final workflow=r.length>7?r[7]:'Booked';final color=bookingStatusColor(workflow);return Card(child:ListTile(
       leading:CircleAvatar(backgroundColor:color.withValues(alpha:.15),child:Icon(workflow=='Cancelled'?Icons.cancel:Icons.event_available,color:color)),
       title:Row(children:[Expanded(child:Text('Booking ${shortBookingId(r[0])}')),Container(padding:const EdgeInsets.symmetric(horizontal:8,vertical:3),decoration:BoxDecoration(color:color.withValues(alpha:.12),borderRadius:BorderRadius.circular(20)),child:Text(workflow,style:TextStyle(color:color,fontSize:11,fontWeight:FontWeight.bold)))]),
       subtitle:Builder(builder:(_){
@@ -751,7 +768,8 @@ class _BookingsPageState extends State<BookingsPage>{
         final paid=paidFor(r[0]);final due=(total-paid)<0?0:total-paid;
         final payment=r.length>11?r[11]:(due<=0?'Paid':paid>0?'Partially Paid':'Pending');
         final rate=r.length>12?r[12]:'';
-        return Text('${customerLabel(r.length>1?r[1]:'')} • ${carLabel(r.length>2?r[2]:'')}\nPickup: ${r.length>3?bookingDateTime(r[3]):''}\nReturn: ${r.length>4?bookingDateTime(r[4]):''}\nPayment: $payment${rate.isEmpty?'':' • INR $rate/day'} • ${documentStatus(r.length>1?r[1]:'')}\nTotal: INR ${total.toStringAsFixed(2)} • Paid: INR ${paid.toStringAsFixed(2)} • Due: INR ${due.toStringAsFixed(2)}');}),
+        final readings=r.length>16&&(r[13].isNotEmpty||r[14].isNotEmpty)?'\nOdometer: ${r[13].isEmpty?'—':r[13]} → ${r[14].isEmpty?'—':r[14]} km • Fuel: ${r[15].isEmpty?'—':r[15]}% → ${r[16].isEmpty?'—':r[16]}%':'';
+        return Text('${customerLabel(r.length>1?r[1]:'')} • ${carLabel(r.length>2?r[2]:'')}\nPickup: ${r.length>3?bookingDateTime(r[3]):''}\nReturn: ${r.length>4?bookingDateTime(r[4]):''}$readings\nPayment: $payment${rate.isEmpty?'':' • INR $rate/day'} • ${documentStatus(r.length>1?r[1]:'')}\nTotal: INR ${total.toStringAsFixed(2)} • Paid: INR ${paid.toStringAsFixed(2)} • Due: INR ${due.toStringAsFixed(2)}');}),
       isThreeLine:false,
       trailing:PopupMenuButton<String>(
         onSelected:(value){
@@ -781,6 +799,8 @@ class _BookingsPageState extends State<BookingsPage>{
             Navigator.of(context).push(MaterialPageRoute(builder:(_)=>PaymentsPage(initialBookingId:r[0]))).then((_)=>load());
           }else if(value=='call'){
             callCustomer(r.length>1?r[1]:'');
+          }else if(value=='handover'){
+            Navigator.of(context).push(MaterialPageRoute(builder:(_)=>BookingHandoverPage(booking:r))).then((_)=>load());
           }else if(value=='delete'){
             remove(r[0]);
           }
@@ -789,6 +809,7 @@ class _BookingsPageState extends State<BookingsPage>{
           PopupMenuItem(value:'edit',child:ListTile(leading:Icon(Icons.edit_calendar),title:Text('Edit booking details'))),
           PopupMenuItem(value:'payment',child:ListTile(leading:Icon(Icons.payments),title:Text('Open booking payment'))),
           PopupMenuItem(value:'call',child:ListTile(leading:Icon(Icons.call),title:Text('Call customer'))),
+          PopupMenuItem(value:'handover',child:ListTile(leading:Icon(Icons.speed),title:Text('Odometer, fuel & photos'))),
           PopupMenuItem(value:'agreement',child:ListTile(
             leading:Icon(Icons.draw),title:Text('Create agreement'))),
           PopupMenuItem(value:'confirm',child:ListTile(
@@ -811,7 +832,7 @@ class _BookingsPageState extends State<BookingsPage>{
       )));})
   ]);
 
-  @override void dispose(){amount.dispose();deposit.dispose();bookingRate.dispose();customerQuery.dispose();super.dispose();}
+  @override void dispose(){amount.dispose();deposit.dispose();bookingRate.dispose();customerQuery.dispose();bookingQuery.dispose();super.dispose();}
 }
 
 class AgreementPage extends StatefulWidget {

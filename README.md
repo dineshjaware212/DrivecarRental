@@ -85,3 +85,5 @@ Version 2.3.0 adds cars and two-wheelers throughout the app, customer-specific b
 Version 2.4.0 adds pickup and return times, booking date/time editing, searchable customer selection, coloured booking statuses, direct customer calling and payment navigation, cancellation-aware earnings, detailed upcoming returns, date-filtered vehicle availability, WhatsApp catalog details, and individual vehicle-photo sharing.
 
 Version 2.4.1 fixes the catalog syntax error reported by Flutter analysis and updates all dropdown form fields to the current `initialValue` API. It also resolves the reported control-flow brace and unnecessary-import analyzer notices.
+
+Version 2.5.0 adds booking-list filters for customer/booking ID and status, plus post-booking pickup/drop odometer readings, fuel levels, and odometer photos. Extra kilometres are calculated automatically from the readings after the included 350 km per rental day. Ertiga is charged at INR 7 per extra kilometre and every other vehicle at INR 5. Fuel shortage is calculated automatically as `(pickup fuel % - drop fuel %) × 0.5 × INR 112` and included in return charges.
