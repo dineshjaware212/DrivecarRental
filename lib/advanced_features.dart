@@ -107,7 +107,7 @@ class _CustomerDocumentsPageState extends State<CustomerDocumentsPage>{
     final row=customer;if(row!=null&&row.length>9&&row[9].isNotEmpty)expiry=DateTime.tryParse(row[9]);
     final expiring=expiry!=null&&expiry!.difference(DateTime.now()).inDays<=30;
     return Scaffold(appBar:AppBar(title:const Text('Customer Documents')),body:ListView(padding:const EdgeInsets.all(14),children:[
-      DropdownButtonFormField<String>(value:customerId,isExpanded:true,decoration:const InputDecoration(labelText:'Select customer',border:OutlineInputBorder()),
+      DropdownButtonFormField<String>(key:ValueKey('documents-$customerId'),initialValue:customerId,isExpanded:true,decoration:const InputDecoration(labelText:'Select customer',border:OutlineInputBorder()),
         items:customers.map((r)=>DropdownMenuItem(value:r[0],child:Text(r.length>1?r[1]:r[0]))).toList(),onChanged:(v)=>setState(()=>customerId=v)),
       if(customerId!=null)...[
         const SizedBox(height:12),docButton(6,'driving_license_path','Driving Licence',Icons.credit_card),
@@ -136,7 +136,22 @@ class _BookingEditPageState extends State<BookingEditPage>{
   Future<void> load()async{customers=await db.rows('Customers');vehicles=await db.rows('Cars');bookings=await db.rows('Bookings');if(mounted)setState((){});}
   int get days{final value=(returnAt.difference(pickup).inMinutes/1440).ceil();return value<1?1:value;}
   double get dailyRate=>double.tryParse(rate.text)??0;
-  Future<void> choose(bool start)async{final initial=start?pickup:returnAt;final d=await showDatePicker(context:context,initialDate:initial,firstDate:DateTime(2020),lastDate:DateTime(2100));if(d==null||!mounted)return;final t=await showTimePicker(context:context,initialTime:TimeOfDay.fromDateTime(initial));if(t==null)return;final value=DateTime(d.year,d.month,d.day,t.hour,t.minute);setState((){if(start){pickup=value;if(!returnAt.isAfter(pickup))returnAt=pickup.add(const Duration(days:1));}else if(value.isAfter(pickup))returnAt=value;});}
+  Future<void> choose(bool start)async{
+    final initial=start?pickup:returnAt;
+    final d=await showDatePicker(context:context,initialDate:initial,firstDate:DateTime(2020),lastDate:DateTime(2100));
+    if(d==null||!mounted){return;}
+    final t=await showTimePicker(context:context,initialTime:TimeOfDay.fromDateTime(initial));
+    if(t==null){return;}
+    final value=DateTime(d.year,d.month,d.day,t.hour,t.minute);
+    setState((){
+      if(start){
+        pickup=value;
+        if(!returnAt.isAfter(pickup)){returnAt=pickup.add(const Duration(days:1));}
+      }else if(value.isAfter(pickup)){
+        returnAt=value;
+      }
+    });
+  }
   Future<void> save()async{
     if(!returnAt.isAfter(pickup)){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Return must be after pickup.')));return;}
     final conflict=bookings.any((r){if(r.isEmpty||r[0]==widget.booking[0]||r.length<8||r[2]!=vehicleId||r[7]=='Cancelled')return false;final s=DateTime.tryParse(r[3]),e=DateTime.tryParse(r[4]);return s!=null&&e!=null&&pickup.isBefore(e)&&returnAt.isAfter(s);});
@@ -146,8 +161,9 @@ class _BookingEditPageState extends State<BookingEditPage>{
     await db.setValueById('Bookings',id,3,pickup.toIso8601String(),header:'pickup_at');await db.setValueById('Bookings',id,4,returnAt.toIso8601String(),header:'return_at');
     await db.setValueById('Bookings',id,5,days*dailyRate,header:'amount');await db.setValueById('Bookings',id,6,double.tryParse(deposit.text)??0,header:'deposit');
     await db.setValueById('Bookings',id,7,status,header:'status');await db.setValueById('Bookings',id,12,dailyRate,header:'daily_rate');
-    if(status=='Cancelled')await db.setValueById('Bookings',id,11,'Cancelled',header:'payment_status');
-    else if(widget.booking.length>7&&widget.booking[7]=='Cancelled'){
+    if(status=='Cancelled'){
+      await db.setValueById('Bookings',id,11,'Cancelled',header:'payment_status');
+    }else if(widget.booking.length>7&&widget.booking[7]=='Cancelled'){
       final paymentRows=await db.rows('Payments');final paid=paymentRows.where((r)=>r.length>2&&r[1]==id).fold<double>(0,(sum,r)=>sum+(double.tryParse(r[2])??0));
       final total=days*dailyRate;await db.setValueById('Bookings',id,11,paid<=0?'Pending':paid>=total-0.01?'Paid':'Partially Paid',header:'payment_status');
     }
@@ -156,12 +172,12 @@ class _BookingEditPageState extends State<BookingEditPage>{
   String vehicleLabel(List<String> r)=>'${r.length>7?r[7]:'Car'} • ${r.length>1?r[1]:''} (${r.length>2?r[2]:''})';
   @override void dispose(){rate.dispose();deposit.dispose();super.dispose();}
   @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:Text('Edit Booking ${shortBookingId(widget.booking[0])}')),body:ListView(padding:const EdgeInsets.all(14),children:[
-    DropdownButtonFormField<String>(value:customers.any((r)=>r.isNotEmpty&&r[0]==customerId)?customerId:null,isExpanded:true,decoration:const InputDecoration(labelText:'Customer',border:OutlineInputBorder()),items:customers.map((r)=>DropdownMenuItem(value:r[0],child:Text(r.length>2?'${r[1]} • ${r[2]}':r[1]))).toList(),onChanged:(v)=>setState(()=>customerId=v??customerId)),const SizedBox(height:8),
-    DropdownButtonFormField<String>(value:vehicles.any((r)=>r.isNotEmpty&&r[0]==vehicleId)?vehicleId:null,isExpanded:true,decoration:const InputDecoration(labelText:'Vehicle',border:OutlineInputBorder()),items:vehicles.map((r)=>DropdownMenuItem(value:r[0],child:Text(vehicleLabel(r)))).toList(),onChanged:(v)=>setState(()=>vehicleId=v??vehicleId)),const SizedBox(height:8),
+    DropdownButtonFormField<String>(key:ValueKey('edit-customer-$customerId-${customers.length}'),initialValue:customers.any((r)=>r.isNotEmpty&&r[0]==customerId)?customerId:null,isExpanded:true,decoration:const InputDecoration(labelText:'Customer',border:OutlineInputBorder()),items:customers.map((r)=>DropdownMenuItem(value:r[0],child:Text(r.length>2?'${r[1]} • ${r[2]}':r[1]))).toList(),onChanged:(v)=>setState(()=>customerId=v??customerId)),const SizedBox(height:8),
+    DropdownButtonFormField<String>(key:ValueKey('edit-vehicle-$vehicleId-${vehicles.length}'),initialValue:vehicles.any((r)=>r.isNotEmpty&&r[0]==vehicleId)?vehicleId:null,isExpanded:true,decoration:const InputDecoration(labelText:'Vehicle',border:OutlineInputBorder()),items:vehicles.map((r)=>DropdownMenuItem(value:r[0],child:Text(vehicleLabel(r)))).toList(),onChanged:(v)=>setState(()=>vehicleId=v??vehicleId)),const SizedBox(height:8),
     ListTile(contentPadding:EdgeInsets.zero,title:const Text('Pickup'),subtitle:Text(bookingDateTime(pickup.toIso8601String())),trailing:TextButton(onPressed:()=>choose(true),child:const Text('Edit date & time'))),
     ListTile(contentPadding:EdgeInsets.zero,title:const Text('Return'),subtitle:Text(bookingDateTime(returnAt.toIso8601String())),trailing:TextButton(onPressed:()=>choose(false),child:const Text('Edit date & time'))),
     field(rate,'Daily rent for this booking (INR)',number:true),field(deposit,'Security deposit (INR)',number:true),
-    DropdownButtonFormField<String>(value:status,decoration:const InputDecoration(labelText:'Booking status',border:OutlineInputBorder()),items:bookingStatuses.map((s)=>DropdownMenuItem(value:s,child:Text(s))).toList(),onChanged:(v)=>setState(()=>status=v??status)),const SizedBox(height:8),
+    DropdownButtonFormField<String>(key:ValueKey(status),initialValue:status,decoration:const InputDecoration(labelText:'Booking status',border:OutlineInputBorder()),items:bookingStatuses.map((s)=>DropdownMenuItem(value:s,child:Text(s))).toList(),onChanged:(v)=>setState(()=>status=v??status)),const SizedBox(height:8),
     Card(color:Theme.of(context).colorScheme.primaryContainer,child:Padding(padding:const EdgeInsets.all(12),child:Text('$days rental day${days==1?'':'s'} • Total INR ${(days*dailyRate).toStringAsFixed(2)}',style:const TextStyle(fontWeight:FontWeight.bold)))),
     FilledButton.icon(onPressed:saving?null:save,icon:const Icon(Icons.save),label:const Text('Save Booking Changes')),
   ]));
@@ -203,9 +219,9 @@ class _InspectionsPageState extends State<InspectionsPage>{
   }
   @override void dispose(){odometer.dispose();fuel.dispose();damage.dispose();signature.dispose();super.dispose();}
   @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('Pickup / Return Inspection')),body:ListView(padding:const EdgeInsets.all(14),children:[
-    DropdownButtonFormField<String>(value:bookingId,isExpanded:true,decoration:const InputDecoration(labelText:'Booking',border:OutlineInputBorder()),
+    DropdownButtonFormField<String>(key:ValueKey('inspection-$bookingId'),initialValue:bookingId,isExpanded:true,decoration:const InputDecoration(labelText:'Booking',border:OutlineInputBorder()),
       items:bookings.map((r)=>DropdownMenuItem(value:r[0],child:Text('Booking ${shortBookingId(r[0])}'))).toList(),onChanged:(v)=>setState(()=>bookingId=v)),
-    const SizedBox(height:8),DropdownButtonFormField<String>(value:type,decoration:const InputDecoration(labelText:'Inspection type',border:OutlineInputBorder()),
+    const SizedBox(height:8),DropdownButtonFormField<String>(key:ValueKey(type),initialValue:type,decoration:const InputDecoration(labelText:'Inspection type',border:OutlineInputBorder()),
       items:const ['Pickup','Return'].map((x)=>DropdownMenuItem(value:x,child:Text(x))).toList(),onChanged:(v)=>setState(()=>type=v??'Pickup')),
     const SizedBox(height:8),field(odometer,'Odometer reading',number:true),field(fuel,'Fuel level (%)',number:true),field(damage,'Existing damage / return notes'),
     OutlinedButton.icon(onPressed:pickMedia,icon:const Icon(Icons.add_a_photo),label:Text('Add photos or videos (${media.length})')),
@@ -263,13 +279,14 @@ class _ReturnChargesPageState extends State<ReturnChargesPage>{
 
 Future<void> showBookingStatusDialog(BuildContext context,List<String> booking,Future<void> Function() reload)async{
   var status=booking.length>7?booking[7]:'Enquiry';if(!bookingStatuses.contains(status))status='Enquiry';
-  final chosen=await showDialog<String>(context:context,builder:(c)=>AlertDialog(title:const Text('Booking Status'),content:DropdownButtonFormField<String>(value:status,
+  final chosen=await showDialog<String>(context:context,builder:(c)=>AlertDialog(title:const Text('Booking Status'),content:DropdownButtonFormField<String>(initialValue:status,
     items:bookingStatuses.map((s)=>DropdownMenuItem(value:s,child:Text(s))).toList(),onChanged:(v)=>status=v??status),
     actions:[TextButton(onPressed:()=>Navigator.pop(c),child:const Text('Cancel')),FilledButton(onPressed:()=>Navigator.pop(c,status),child:const Text('Save'))]));
   if(chosen!=null){
     await db.setValueById('Bookings',booking[0],7,chosen,header:'status');
-    if(chosen=='Cancelled')await db.setValueById('Bookings',booking[0],11,'Cancelled',header:'payment_status');
-    else if(booking.length>7&&booking[7]=='Cancelled'){
+    if(chosen=='Cancelled'){
+      await db.setValueById('Bookings',booking[0],11,'Cancelled',header:'payment_status');
+    }else if(booking.length>7&&booking[7]=='Cancelled'){
       final paymentRows=await db.rows('Payments');final paid=paymentRows.where((r)=>r.length>2&&r[1]==booking[0]).fold<double>(0,(sum,r)=>sum+(double.tryParse(r[2])??0));
       final total=booking.length>5?double.tryParse(booking[5])??0:0;await db.setValueById('Bookings',booking[0],11,paid<=0?'Pending':paid>=total-0.01?'Paid':'Partially Paid',header:'payment_status');
     }
@@ -371,9 +388,9 @@ class _ExpensesReportPageState extends State<ExpensesReportPage>{
       Text('Income INR ${monthIncome.toStringAsFixed(2)} • Expenses INR ${monthCost.toStringAsFixed(2)}'),Text('Best-performing car: $bestCar'),
     ]))),const Divider(height:28),
     const Text('Add Expense',style:TextStyle(fontSize:18,fontWeight:FontWeight.bold)),const SizedBox(height:8),
-    DropdownButtonFormField<String>(value:carId,isExpanded:true,decoration:const InputDecoration(labelText:'Vehicle (optional)',border:OutlineInputBorder()),
+    DropdownButtonFormField<String>(key:ValueKey('expense-car-$carId'),initialValue:carId,isExpanded:true,decoration:const InputDecoration(labelText:'Vehicle (optional)',border:OutlineInputBorder()),
       items:cars.map((r)=>DropdownMenuItem(value:r[0],child:Text(r.length>1?r[1]:r[0]))).toList(),onChanged:(v)=>setState(()=>carId=v)),const SizedBox(height:8),
-    DropdownButtonFormField<String>(value:category,decoration:const InputDecoration(labelText:'Category',border:OutlineInputBorder()),
+    DropdownButtonFormField<String>(key:ValueKey(category),initialValue:category,decoration:const InputDecoration(labelText:'Category',border:OutlineInputBorder()),
       items:const ['Fuel','Maintenance','Insurance','EMI','Cleaning','Repair','Other'].map((x)=>DropdownMenuItem(value:x,child:Text(x))).toList(),onChanged:(v)=>setState(()=>category=v??'Other')),const SizedBox(height:8),
     field(amount,'Expense amount',number:true),field(notes,'Notes'),FilledButton.icon(onPressed:add,icon:const Icon(Icons.add),label:const Text('Record Expense')),
     const Divider(height:28),const Text('Expense History',style:TextStyle(fontSize:18,fontWeight:FontWeight.bold)),

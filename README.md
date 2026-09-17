@@ -83,3 +83,5 @@ Version 2.1.1 resolves Flutter analysis errors by hiding Excel's conflicting `Bo
 Version 2.3.0 adds cars and two-wheelers throughout the app, customer-specific booking rates, clickable dashboard navigation, booking-linked customer documents, contact-to-customer creation, GoCar Rental Services branding, and detailed invoice/receipt PDFs.
 
 Version 2.4.0 adds pickup and return times, booking date/time editing, searchable customer selection, coloured booking statuses, direct customer calling and payment navigation, cancellation-aware earnings, detailed upcoming returns, date-filtered vehicle availability, WhatsApp catalog details, and individual vehicle-photo sharing.
+
+Version 2.4.1 fixes the catalog syntax error reported by Flutter analysis and updates all dropdown form fields to the current `initialValue` API. It also resolves the reported control-flow brace and unnecessary-import analyzer notices.

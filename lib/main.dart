@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -24,14 +23,16 @@ CellValue toCellValue(dynamic value) {
   if (value is double) return DoubleCellValue(value);
   if (value is num) return DoubleCellValue(value.toDouble());
   if (value is bool) return BoolCellValue(value);
-  if (value is DateTime) return DateTimeCellValue(
-    year: value.year,
-    month: value.month,
-    day: value.day,
-    hour: value.hour,
-    minute: value.minute,
-    second: value.second,
-  );
+  if (value is DateTime) {
+    return DateTimeCellValue(
+      year: value.year,
+      month: value.month,
+      day: value.day,
+      hour: value.hour,
+      minute: value.minute,
+      second: value.second,
+    );
+  }
   return TextCellValue(value.toString());
 }
 
@@ -394,7 +395,9 @@ class _HomePageState extends State<HomePage> {
   @override void initState() { super.initState(); load(); }
   Future<void> load() async {
     final m = <String,int>{};
-    for (final s in LocalExcelDb.sheets.take(5)) m[s] = (await db.rows(s)).length;
+    for (final s in LocalExcelDb.sheets.take(5)) {
+      m[s] = (await db.rows(s)).length;
+    }
     final vehicles=await db.rows('Cars');
     m['Cars']=vehicles.where((r)=>r.length<=7||r[7]!='Two Wheeler').length;
     m['TwoWheelers']=vehicles.where((r)=>r.length>7&&r[7]=='Two Wheeler').length;
@@ -471,7 +474,7 @@ class _CarsPageState extends State<CarsPage> {
   }
   @override Widget build(BuildContext c)=>ListView(padding:const EdgeInsets.all(12),children:[
     const Text('Vehicles',style:TextStyle(fontSize:26,fontWeight:FontWeight.bold)),
-    DropdownButtonFormField<String>(value:vehicleType,decoration:const InputDecoration(labelText:'Vehicle type',border:OutlineInputBorder()),
+    DropdownButtonFormField<String>(key:ValueKey(vehicleType),initialValue:vehicleType,decoration:const InputDecoration(labelText:'Vehicle type',border:OutlineInputBorder()),
       items:const ['Car','Two Wheeler'].map((x)=>DropdownMenuItem(value:x,child:Text(x))).toList(),onChanged:(v)=>setState(()=>vehicleType=v??'Car')),
     const SizedBox(height:8),field(name,'Vehicle name / model'),field(reg,'Registration'),field(rate,'Default daily rate (INR)',number:true),
     FilledButton.icon(onPressed:add,icon:const Icon(Icons.add),label:const Text('Add Vehicle')),
@@ -506,7 +509,7 @@ class _CatalogPageState extends State<CatalogPage>{
   List<List<String>> get availableCars=>cars.where(available).toList();
   Future<void> load()async{cars=await db.rows('Cars');bookings=await db.rows('Bookings');if(mounted)setState((){});}
   Future<void> chooseDates()async{final value=await showDateRangePicker(context:context,firstDate:DateTime(2020),lastDate:DateTime(2100),initialDateRange:DateTimeRange(start:DateTime(range.start.year,range.start.month,range.start.day),end:DateTime(range.end.subtract(const Duration(days:1)).year,range.end.subtract(const Duration(days:1)).month,range.end.subtract(const Duration(days:1)).day)));if(value!=null)setState(()=>range=DateTimeRange(start:value.start,end:value.end.add(const Duration(days:1))));}
-  String catalogText()=>['GoCar Rental Services - available vehicles','Dates: ${DateFormat('dd MMM yyyy').format(range.start)} to ${DateFormat('dd MMM yyyy').format(range.end.subtract(const Duration(days:1))))}','',...availableCars.map((r)=>'${r.length>1?r[1]:'Vehicle'} (${r.length>2?r[2]:''}) - ${r.length>7?r[7]:'Car'} - INR ${r.length>3?r[3]:'0'}/day')].join('\n');
+  String catalogText()=>['GoCar Rental Services - available vehicles','Dates: ${DateFormat('dd MMM yyyy').format(range.start)} to ${DateFormat('dd MMM yyyy').format(range.end.subtract(const Duration(days:1)))}','',...availableCars.map((r)=>'${r.length>1?r[1]:'Vehicle'} (${r.length>2?r[2]:''}) - ${r.length>7?r[7]:'Car'} - INR ${r.length>3?r[3]:'0'}/day')].join('\n');
   Future<void> shareCatalog()async{
     setState(()=>busy=true);
     try{final file=await CatalogService.build(availableCars);await Share.shareXFiles([XFile(file.path)],
@@ -515,8 +518,11 @@ class _CatalogPageState extends State<CatalogPage>{
   }
   Future<void> shareVehicle(List<String> vehicle)async{
     final text='GoCar Rental Services\n${vehicle.length>1?vehicle[1]:'Vehicle'}\nType: ${vehicle.length>7?vehicle[7]:'Car'}\nRegistration: ${vehicle.length>2?vehicle[2]:''}\nRate: INR ${vehicle.length>3?vehicle[3]:'0'}/day\nAvailable: ${DateFormat('dd MMM').format(range.start)} to ${DateFormat('dd MMM yyyy').format(range.end.subtract(const Duration(days:1)))}';
-    if(vehicle.length>6&&vehicle[6].isNotEmpty&&File(vehicle[6]).existsSync())await Share.shareXFiles([XFile(vehicle[6])],text:'$text\n\nSelect WhatsApp to share.');
-    else await Share.share(text,subject:'Available rental vehicle');
+    if(vehicle.length>6&&vehicle[6].isNotEmpty&&File(vehicle[6]).existsSync()){
+      await Share.shareXFiles([XFile(vehicle[6])],text:'$text\n\nSelect WhatsApp to share.');
+    }else{
+      await Share.share(text,subject:'Available rental vehicle');
+    }
   }
   @override Widget build(BuildContext context)=>Scaffold(
     appBar:AppBar(title:const Text('Available Vehicles Catalog')),
@@ -566,8 +572,10 @@ class _CustomersPageState extends State<CustomersPage>{
   Future<void> selectFromContacts()async{
     try{
       if(!await FlutterContacts.requestPermission(readonly:true)){
-        if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content:Text('Contacts permission is required. Please allow it in phone settings.')));
+        if(mounted){
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content:Text('Contacts permission is required. Please allow it in phone settings.')));
+        }
         return;
       }
       final selected=await FlutterContacts.openExternalPick();
@@ -576,17 +584,23 @@ class _CustomersPageState extends State<CustomersPage>{
       final selectedName=contact.displayName.trim();
       final selectedPhone=contact.phones.isEmpty?'':contact.phones.first.number.trim();
       if(selectedName.isEmpty||selectedPhone.isEmpty){
-        if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content:Text('The selected contact must have a name and phone number.')));
+        if(mounted){
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content:Text('The selected contact must have a name and phone number.')));
+        }
         return;
       }
       await db.add('Customers',[newId(),selectedName,selectedPhone,'','','']);
       await load();
-      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content:Text('$selectedName added as a customer.')));
+      if(mounted){
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content:Text('$selectedName added as a customer.')));
+      }
     }catch(e){
-      if(mounted)ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content:Text('Unable to open phone contacts: $e')));
+      if(mounted){
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content:Text('Unable to open phone contacts: $e')));
+      }
     }
   }
   @override Widget build(BuildContext c)=>ListView(padding:const EdgeInsets.all(12),children:[
@@ -705,12 +719,12 @@ class _BookingsPageState extends State<BookingsPage>{
     const Text('Bookings',style:TextStyle(fontSize:26,fontWeight:FontWeight.bold)),
     TextField(controller:customerQuery,decoration:const InputDecoration(prefixIcon:Icon(Icons.search),labelText:'Filter customers by name or phone',border:OutlineInputBorder()),onChanged:(_)=>setState((){})),
     const SizedBox(height:8),
-    DropdownButtonFormField<String>(value:selectedCustomerId,isExpanded:true,
+    DropdownButtonFormField<String>(key:ValueKey('customer-$selectedCustomerId'),initialValue:selectedCustomerId,isExpanded:true,
       decoration:const InputDecoration(labelText:'Select customer',border:OutlineInputBorder()),
       items:filteredCustomers.map((r)=>DropdownMenuItem(value:r[0],child:Text(r.length>2?'${r[1]} • ${r[2]}':r[1]))).toList(),
       onChanged:(v)=>setState(()=>selectedCustomerId=v)),
     const SizedBox(height:8),
-    DropdownButtonFormField<String>(value:selectedCarId,isExpanded:true,
+    DropdownButtonFormField<String>(key:ValueKey('vehicle-$selectedCarId'),initialValue:selectedCarId,isExpanded:true,
       decoration:const InputDecoration(labelText:'Select vehicle',border:OutlineInputBorder()),
       items:cars.map((r)=>DropdownMenuItem(value:r[0],child:Text('${carLabel(r[0])} • INR ${r.length>3?r[3]:'0'}/day'))).toList(),
       onChanged:(v)=>setState((){selectedCarId=v;bookingRate.text=defaultDailyRate.toStringAsFixed(2);recalculate();})),
@@ -1029,7 +1043,7 @@ class _PaymentsPageState extends State<PaymentsPage>{
   }
   @override Widget build(BuildContext c)=>ListView(padding:const EdgeInsets.all(12),children:[
     const Text('Payments',style:TextStyle(fontSize:26,fontWeight:FontWeight.bold)),
-    DropdownButtonFormField<String>(value:selectedBookingId,isExpanded:true,
+    DropdownButtonFormField<String>(key:ValueKey('booking-$selectedBookingId'),initialValue:selectedBookingId,isExpanded:true,
       decoration:const InputDecoration(labelText:'Select booking',border:OutlineInputBorder()),
       items:bookings.map((r)=>DropdownMenuItem(value:r[0],child:Text(bookingLabel(r),overflow:TextOverflow.ellipsis))).toList(),
       onChanged:(v)=>setState((){selectedBookingId=v;updateDue();})),
@@ -1049,7 +1063,7 @@ class _PaymentsPageState extends State<PaymentsPage>{
         icon:const Icon(Icons.account_balance_wallet),label:const Text('Request Remaining Amount on WhatsApp'))),
     ]))),
     field(amount,'Payment amount (auto-filled balance)',number:true),
-    DropdownButtonFormField<String>(value:method,
+    DropdownButtonFormField<String>(key:ValueKey(method),initialValue:method,
       decoration:const InputDecoration(labelText:'Payment method',border:OutlineInputBorder()),
       items:const ['UPI','Cash','Card','Bank Transfer'].map((m)=>DropdownMenuItem(value:m,child:Text(m))).toList(),
       onChanged:(v)=>setState(()=>method=v??'UPI')),
