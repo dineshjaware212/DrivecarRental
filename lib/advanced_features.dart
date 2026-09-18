@@ -27,6 +27,7 @@ class OperationsHubPage extends StatelessWidget{
       (title:'Availability Calendar',icon:Icons.calendar_month,page:const AvailabilityPage()),
       (title:'Pickup / Return Inspections',icon:Icons.fact_check,page:const InspectionsPage()),
       (title:'Customer Documents',icon:Icons.badge,page:const CustomerDocumentsPage()),
+      (title:'WhatsApp Sharing',icon:Icons.share,page:const WhatsAppSharingPage()),
       (title:'Expenses & Profit',icon:Icons.analytics,page:const ExpensesReportPage()),
     ];
     return Scaffold(appBar:AppBar(title:const Text('Rental Operations')),body:GridView.builder(
@@ -39,6 +40,43 @@ class OperationsHubPage extends StatelessWidget{
           Text(item.title,textAlign:TextAlign.center,style:const TextStyle(fontWeight:FontWeight.bold)),
         ]))));}));
   }
+}
+
+class WhatsAppSharingPage extends StatefulWidget{
+  const WhatsAppSharingPage({super.key});
+  @override State<WhatsAppSharingPage> createState()=>_WhatsAppSharingPageState();
+}
+class _WhatsAppSharingPageState extends State<WhatsAppSharingPage>{
+  static const locationUrl='https://maps.app.goo.gl/SC3rdrcGHAgNA88A7';
+  bool sharing=false;
+  Future<void> shareTerms()async{
+    final text=['GoCar Rental Services','Terms and Conditions','',...agreementTerms].join('\n\n');
+    await Share.share('$text\n\nPlease read and confirm your acceptance of these terms.\n\nThank you,\nGoCar Rental Services',subject:'Rental Terms and Conditions');
+  }
+  Future<void> shareLocation()async{
+    await Share.share('GoCar Rental Services location:\n$locationUrl\n\nPlease use this Google Maps link for pickup or vehicle return.',subject:'GoCar Rental Services Location');
+  }
+  Future<void> shareTokenQr()async{
+    setState(()=>sharing=true);
+    try{
+      final bytes=await rootBundle.load('assets/payment_qr.png');final root=await getApplicationDocumentsDirectory();
+      final file=File('${root.path}/GoCar_Token_Payment_QR.png');await file.writeAsBytes(bytes.buffer.asUint8List(bytes.offsetInBytes,bytes.lengthInBytes),flush:true);
+      const text='Please send INR 500 as the token amount using the attached QR code to confirm your booking.\n\nUPI ID: dineshjaware212@okhdfcbank\n\nAfter payment, please share the transaction screenshot.\n\nThank you,\nGoCar Rental Services';
+      await Share.shareXFiles([XFile(file.path)],subject:'INR 500 booking token payment',text:'$text\n\nSelect WhatsApp to send this request.');
+    }finally{if(mounted){setState(()=>sharing=false);}}
+  }
+  @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('WhatsApp Sharing')),body:ListView(padding:const EdgeInsets.all(16),children:[
+    const Text('Quick Share',style:TextStyle(fontSize:26,fontWeight:FontWeight.bold)),const SizedBox(height:6),
+    const Text('Choose WhatsApp from the Android share menu after tapping an option.'),const SizedBox(height:16),
+    Card(child:ListTile(leading:const CircleAvatar(child:Icon(Icons.description)),title:const Text('Terms and Conditions'),subtitle:const Text('Share the complete rental terms with a customer'),trailing:const Icon(Icons.share),onTap:shareTerms)),
+    Card(child:ListTile(leading:const CircleAvatar(child:Icon(Icons.location_on)),title:const Text('Pickup / Drop Location'),subtitle:const Text(locationUrl),trailing:const Icon(Icons.share),onTap:shareLocation)),
+    Card(child:Padding(padding:const EdgeInsets.all(14),child:Column(children:[
+      Image.asset('assets/payment_qr.png',height:220,fit:BoxFit.contain),const SizedBox(height:8),
+      const Text('INR 500 Booking Token',style:TextStyle(fontSize:18,fontWeight:FontWeight.bold)),
+      const Text('UPI: dineshjaware212@okhdfcbank'),const SizedBox(height:12),
+      SizedBox(width:double.infinity,child:FilledButton.icon(onPressed:sharing?null:shareTokenQr,icon:const Icon(Icons.share),label:const Text('Share QR for INR 500 on WhatsApp'))),
+    ]))),
+  ]));
 }
 
 class AvailabilityPage extends StatefulWidget{
