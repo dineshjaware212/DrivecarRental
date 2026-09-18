@@ -1,7 +1,7 @@
 name: driverent_manager
 description: GoCar Rental Services - offline vehicle rental management app
 publish_to: "none"
-version: 2.5.0+19
+version: 2.6.0+20
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
